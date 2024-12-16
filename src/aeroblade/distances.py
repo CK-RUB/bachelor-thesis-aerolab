@@ -1,4 +1,5 @@
 import abc
+import platform
 import warnings
 from pathlib import Path
 from typing import Any, Optional
@@ -138,7 +139,9 @@ def _compute_lpips(
         warnings.simplefilter("ignore")
         model = _PatchedLPIPS(spatial=True, **model_kwargs).to(device())
 
-    torch.compile(model.net)
+    # Check operating system before using torch.compile
+    if platform.system() != "Windows":
+        torch.compile(model.net)
 
     lpips_layers = [[] for _ in range(1 + len(model.chns))]
     for (tensor_a, _), (tensor_b, _) in tqdm(

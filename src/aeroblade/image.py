@@ -1,4 +1,5 @@
 from pathlib import Path
+import platform
 from typing import Optional
 
 import numpy as np
@@ -72,7 +73,10 @@ def compute_reconstructions(
             use_safetensors=True,
             variant="fp16" if "kandinsky-2" not in repo_id else None,
         )
-        pipe.enable_model_cpu_offload()
+
+        # Check if CUDA is available before enabling CPU offload
+        if torch.cuda.is_available():
+            pipe.enable_model_cpu_offload()
 
         # extract AE
         if hasattr(pipe, "vae"):
@@ -81,8 +85,17 @@ def compute_reconstructions(
                 pipe.upcast_vae()
         elif hasattr(pipe, "movq"):
             ae = pipe.movq
-        ae.to(device())
-        ae = torch.compile(ae)
+
+        # Move AE to the correct device with appropriate dtype
+        if torch.cuda.is_available():
+            ae.to(device(), dtype=torch.float16)  # Use float16 on GPU
+        else:
+            ae.to(device(), dtype=torch.float32)  # Use float32 on CPU
+
+        # Check operating system before using torch.compile
+        if platform.system() != "Windows":
+            ae = torch.compile(ae)
+
         decode_dtype = next(iter(ae.post_quant_conv.parameters())).dtype
 
         # reconstruct
@@ -93,7 +106,8 @@ def compute_reconstructions(
             desc=f"Reconstructing with {repo_id}.",
         ):
             # normalize
-            images = images.to(device(), dtype=ae.dtype) * 2.0 - 1.0
+            images = images.to(device(), dtype=torch.float16 if torch.cuda.is_available() else torch.float32) * 2.0 - 1.0
+
 
             # encode
             latents = retrieve_latents(ae.encode(images), generator=generator)

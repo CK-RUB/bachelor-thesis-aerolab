@@ -748,7 +748,10 @@ def create_pipeline(
     pipeline.inverse_scheduler = DDIMInverseScheduler.from_config(
         pipeline.scheduler.config
     )
-    pipeline.enable_model_cpu_offload()
+
+    # Check if CUDA is available before enabling CPU offload
+    if torch.cuda.is_available():
+        pipeline.enable_model_cpu_offload()
 
     pipeline.captioner = captioner
     return pipeline
