@@ -56,7 +56,7 @@ def convert_and_filter_images(input_files, output_dir, compression_level=6, min_
         compression_level (int): PNG compression level (0 = no compression, 9 = max compression).
         min_side (int): Minimum allowed size of the smaller side of the image (optional).
         max_pixels (int): Maximum allowed total number of pixels (width * height, optional).
-        image_size (int): Size of the square center crop. Must be <= min_side.
+        image_size (int): Size of the square center crop.
 
     Returns:
         list: A list of file paths for the successfully processed and valid images.
@@ -123,8 +123,7 @@ def main():
     parser.add_argument("--min_side", type=int, default=None,
                         help="Minimum size of the smaller side of the image (optional).")
     parser.add_argument("--max_pixels", type=int, default=None, help="Maximum total number of pixels (optional).")
-    parser.add_argument("--image_size", type=int, default=512,
-                        help="Size of the square center crop (default: 512 px). Must be <= min_side.")
+    parser.add_argument("--image_size", type=int, default=512, help="Size of the square center crop (default: 512 px).")
 
     args = parser.parse_args()  # Parse the arguments from the command line.
 
