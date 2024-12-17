@@ -30,8 +30,9 @@ def download_images(csv_file, column, output_dir):
             response = requests.get(url, stream=True)
             response.raise_for_status()  # Raise an exception for HTTP errors.
 
-            # Save the image with a sequential name.
-            filename = os.path.join(output_dir, f"image_{i}.tif")
+            # Extract original filename from the URL, removing query parameters.
+            filename = os.path.join(output_dir, os.path.basename(url.split('?')[0]))
+            
             with open(filename, "wb") as f:
                 for chunk in response.iter_content(1024):  # Write the file in chunks for efficiency.
                     f.write(chunk)
