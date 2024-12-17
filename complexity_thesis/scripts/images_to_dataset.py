@@ -1,27 +1,27 @@
 import argparse
-import os
+from pathlib import Path
 import requests
 from PIL import Image
 import pandas as pd
 
 
-def download_images(csv_file, column, output_dir):
+def download_images(csv_file, column, download_dir):
     """
     Downloads images from URLs provided in a specified CSV column.
 
     Args:
-        csv_file (str): Path to the CSV file containing image URLs.
+        csv_file (Path): Path to the CSV file containing image URLs.
         column (str): Name of the column in the CSV file that contains URLs.
-        output_dir (str): Directory where the downloaded images will be saved.
+        download_dir (Path): Directory where the downloaded images (.tif) will be saved.
 
     Returns:
         list: A list of file paths for the successfully downloaded images.
 
     This function reads the URLs from the specified column of the input CSV file.
-    Each URL is used to download an image, which is saved as a `.tif` file in the output directory.
+    Each URL is used to download an image, which is saved as a `.tif` file in the download directory.
     If a download fails, the error is logged, and the process continues for the remaining URLs.
     """
-    os.makedirs(output_dir, exist_ok=True)  # Ensure the output directory exists.
+    download_dir.mkdir(parents=True, exist_ok=True)  # Ensure the download directory exists
     urls = pd.read_csv(csv_file)[column]  # Read the CSV file and extract the specified column.
     downloaded_files = []  # List to store paths of successfully downloaded files.
 
@@ -32,8 +32,8 @@ def download_images(csv_file, column, output_dir):
             response.raise_for_status()  # Raise an exception for HTTP errors.
 
             # Extract original filename from the URL, removing query parameters.
-            filename = os.path.join(output_dir, os.path.basename(url.split('?')[0]))
-            
+            filename = download_dir / Path(url.split('?')[0]).name
+
             with open(filename, "wb") as f:
                 for chunk in response.iter_content(1024):  # Write the file in chunks for efficiency.
                     f.write(chunk)
@@ -52,7 +52,7 @@ def convert_and_filter_images(input_files, output_dir, compression_level=6, min_
 
     Args:
         input_files (list): List of file paths to the downloaded .tif images.
-        output_dir (str): Directory where the processed .png images will be saved.
+        output_dir (Path): Directory where the processed .png images will be saved.
         compression_level (int): PNG compression level (0 = no compression, 9 = max compression).
         min_side (int): Minimum allowed size of the smaller side of the image (optional).
         max_pixels (int): Maximum allowed total number of pixels (width * height, optional).
@@ -67,7 +67,7 @@ def convert_and_filter_images(input_files, output_dir, compression_level=6, min_
     3. Converts valid images to `.png` format with the specified compression level.
     4. Skips images that do not meet the criteria, logging the reasons.
     """
-    os.makedirs(output_dir, exist_ok=True)  # Ensure the output directory exists.
+    output_dir.mkdir(parents=True, exist_ok=True)  # Ensure the output directory exists
     valid_images = []  # List to store paths of valid processed images.
 
     for input_file in input_files:
@@ -93,7 +93,7 @@ def convert_and_filter_images(input_files, output_dir, compression_level=6, min_
                     img = img.crop((left, top, right, bottom))
 
                     # Generate the output file name.
-                    output_file = os.path.join(output_dir, os.path.basename(input_file).replace(".tif", ".png"))
+                    output_file = output_dir / input_file.with_suffix(".png").name
                     # Save the image as a PNG with specified compression.
                     img.save(output_file, format="PNG", compress_level=compression_level)
                     valid_images.append(output_file)  # Add the valid image to the list.
@@ -116,9 +116,11 @@ def main():
     3. Crops, converts, and filters the images based on size criteria (if specified).
     """
     parser = argparse.ArgumentParser(description="Download, convert, crop, and filter images from a CSV file.")
-    parser.add_argument("--csv_file", required=True, help="Path to the CSV file containing image URLs.")
-    parser.add_argument("--column", required=True, help="Column name in the CSV file containing URLs.")
-    parser.add_argument("--output_dir", required=True, help="Directory to save the processed images.")
+    parser.add_argument("--csv_file", type=Path, required=True, help="Path to the CSV file containing image URLs.")
+    parser.add_argument("--column", type=str, required=True, help="Column name in the CSV file containing URLs.")
+    parser.add_argument("--output_dir", type=Path, required=True, help="Directory to save the processed images.")
+    parser.add_argument("--download_dir", type=Path, default=None,
+                        help="Directory to save downloaded .tif files. Defaults to 'output_dir/download'.")
     parser.add_argument("--compression", type=int, default=6, help="PNG compression level (0-9).")
     parser.add_argument("--min_side", type=int, default=None,
                         help="Minimum size of the smaller side of the image (optional).")
@@ -127,8 +129,11 @@ def main():
 
     args = parser.parse_args()  # Parse the arguments from the command line.
 
+    # Set download_dir relative to output_dir if not specified
+    download_dir = args.download_dir if args.download_dir else args.output_dir / "download"
+
     print("Downloading images...")
-    tif_files = download_images(args.csv_file, args.column, args.output_dir)  # Step 1: Download images.
+    tif_files = download_images(args.csv_file, args.column, download_dir)  # Step 1: Download images.
 
     print("Converting, cropping, and filtering images...")
     convert_and_filter_images(
