@@ -4,6 +4,7 @@ import requests
 from PIL import Image
 import pandas as pd
 
+
 def download_images(csv_file, column, output_dir):
     """
     Downloads images from URLs provided in a specified CSV column.
@@ -43,7 +44,9 @@ def download_images(csv_file, column, output_dir):
 
     return downloaded_files
 
-def convert_and_filter_images(input_files, output_dir, compression_level=6, min_side=512, max_pixels=768**2, image_size=512):
+
+def convert_and_filter_images(input_files, output_dir, compression_level=6, min_side=None, max_pixels=None,
+                              image_size=512):
     """
     Converts .tif images to .png format, applies compression, performs center crop, and filters images by size.
 
@@ -51,15 +54,15 @@ def convert_and_filter_images(input_files, output_dir, compression_level=6, min_
         input_files (list): List of file paths to the downloaded .tif images.
         output_dir (str): Directory where the processed .png images will be saved.
         compression_level (int): PNG compression level (0 = no compression, 9 = max compression).
-        min_side (int): Minimum allowed size of the smaller side of the image.
-        max_pixels (int): Maximum allowed total number of pixels (width * height).
+        min_side (int): Minimum allowed size of the smaller side of the image (optional).
+        max_pixels (int): Maximum allowed total number of pixels (width * height, optional).
         image_size (int): Size of the square center crop. Must be <= min_side.
 
     Returns:
         list: A list of file paths for the successfully processed and valid images.
 
     This function processes each `.tif` file:
-    1. Checks if the image dimensions meet the specified criteria.
+    1. Checks if the image dimensions meet the specified criteria (if provided).
     2. Crops the image to a square center crop of size `image_size`.
     3. Converts valid images to `.png` format with the specified compression level.
     4. Skips images that do not meet the criteria, logging the reasons.
@@ -75,8 +78,10 @@ def convert_and_filter_images(input_files, output_dir, compression_level=6, min_
                 smaller_side = min(width, height)
                 total_pixels = width * height
 
-                # Check if the image meets the size criteria.
-                if smaller_side >= min_side and total_pixels <= max_pixels:
+                # Check size criteria only if arguments are specified.
+                if ((min_side is None or smaller_side >= min_side) and
+                        (max_pixels is None or total_pixels <= max_pixels)):
+
                     # Determine crop size: image_size must be <= smaller_side.
                     crop_size = min(image_size, smaller_side)
 
@@ -100,6 +105,7 @@ def convert_and_filter_images(input_files, output_dir, compression_level=6, min_
 
     return valid_images
 
+
 def main():
     """
     Main function to parse arguments and orchestrate the image processing workflow.
@@ -107,16 +113,18 @@ def main():
     This function:
     1. Parses command-line arguments to specify input CSV, column, and other parameters.
     2. Downloads `.tif` images from URLs in the specified CSV column.
-    3. Crops, converts, and filters the images based on size criteria.
+    3. Crops, converts, and filters the images based on size criteria (if specified).
     """
     parser = argparse.ArgumentParser(description="Download, convert, crop, and filter images from a CSV file.")
     parser.add_argument("--csv_file", required=True, help="Path to the CSV file containing image URLs.")
     parser.add_argument("--column", required=True, help="Column name in the CSV file containing URLs.")
     parser.add_argument("--output_dir", required=True, help="Directory to save the processed images.")
     parser.add_argument("--compression", type=int, default=6, help="PNG compression level (0-9).")
-    parser.add_argument("--min_side", type=int, default=512, help="Minimum size of the smaller side of the image.")
-    parser.add_argument("--max_pixels", type=int, default=768**2, help="Maximum total number of pixels.")
-    parser.add_argument("--image_size", type=int, default=512, help="Size of the square center crop (default: 512 px). Must be <= min_side.")
+    parser.add_argument("--min_side", type=int, default=None,
+                        help="Minimum size of the smaller side of the image (optional).")
+    parser.add_argument("--max_pixels", type=int, default=None, help="Maximum total number of pixels (optional).")
+    parser.add_argument("--image_size", type=int, default=512,
+                        help="Size of the square center crop (default: 512 px). Must be <= min_side.")
 
     args = parser.parse_args()  # Parse the arguments from the command line.
 
@@ -132,6 +140,7 @@ def main():
         max_pixels=args.max_pixels,
         image_size=args.image_size
     )  # Step 2: Convert, crop, and filter images.
+
 
 if __name__ == "__main__":
     main()
