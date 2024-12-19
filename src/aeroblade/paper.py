@@ -13,14 +13,28 @@ def get_nice_name(input: str) -> str:
         if "real" in input:
             return "Real"
         elif "stable-diffusion" in input:
-            version = re.search("(\d)-(\d)", input)
-            return f"SD{version.group(1)}.{version.group(2)}"
+            version = re.search("(\d)-(\d)|xl|-(\d)$", input)
+            if version and version.group(0) == "xl":
+                return "SDXL"
+            elif version and version.group(3):
+                return f"SD{version.group(3)}"
+            elif version:
+                return f"SD{version.group(1)}.{version.group(2)}"
         elif "kandinsky" in input:
             version = re.search("(\d)-(\d)", input)
             return f"KD{version.group(1)}.{version.group(2)}"
         elif "midjourney" in input:
             version = re.search("-v(.*)", input)
             return f"MJ{version.group(1).replace('-', '.')}"
+        elif "dalle2" in input:
+            return "DALL-E 2"
+        elif "dalle3" in input:
+            return "DALL-E 3"
+        elif "firefly" in input:
+            return "Firefly"
+        elif "glide" in input:
+            return "GLIDE"
+
     # AEs
     elif input == "CompVis/stable-diffusion-v1-1":
         return "SD1"
