@@ -31,13 +31,13 @@ def download_image(url, download_dir):
         return None
 
 
-def download_images(csv_file, column, download_dir, num_workers=4):
+def download_images(csv_file, csv_column, download_dir, num_workers=4):
     """
     Downloads images from URLs provided in a specified CSV column using multithreading.
 
     Args:
         csv_file (Path): Path to the CSV file containing image URLs.
-        column (str): Name of the column in the CSV file that contains URLs.
+        csv_column (str): Name of the column in the CSV file that contains URLs.
         download_dir (Path): Directory where the downloaded images will be saved.
         num_workers (int): Number of worker threads for downloading.
 
@@ -45,7 +45,7 @@ def download_images(csv_file, column, download_dir, num_workers=4):
         list: A list of file paths for the successfully downloaded images.
     """
     download_dir.mkdir(parents=True, exist_ok=True)
-    urls = pd.read_csv(csv_file)[column]
+    urls = pd.read_csv(csv_file)[csv_column]
     downloaded_files = []
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
@@ -56,6 +56,26 @@ def download_images(csv_file, column, download_dir, num_workers=4):
                 downloaded_files.append(result)
 
     return downloaded_files
+
+
+def gather_input_images(input_dirs):
+    """
+    Gathers all image files (PNG, JPG) from the provided input directories or files.
+
+    Args:
+        input_dirs (list): List of directories or files to gather images from.
+
+    Returns:
+        list: A list of file paths to the gathered images.
+    """
+    input_files = []
+    for path in input_dirs:
+        p = Path(path)
+        if p.is_dir():
+            input_files.extend(list(p.glob("**/*.png")) + list(p.glob("**/*.jpg")))
+        elif p.is_file() and (p.suffix.lower() in [".png", ".jpg"]):
+            input_files.append(p)
+    return input_files
 
 
 def convert_and_filter_image(input_file, output_dir, compression_level, min_side, max_pixels, image_size):
@@ -104,7 +124,7 @@ def convert_and_filter_images(input_files, output_dir, compression_level=6, min_
         output_dir (Path): Directory where the processed .png images will be saved.
         compression_level (int): PNG compression level (0-9).
         min_side (int): Minimum allowed size of the smaller side.
-        max_pixels (int): Maximum allowed total number of pixels.
+        max_pixels (int): Maximum total number of pixels.
         image_size (int): Size of the square center crop.
         num_workers (int): Number of worker threads for processing.
 
@@ -126,9 +146,13 @@ def convert_and_filter_images(input_files, output_dir, compression_level=6, min_
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Download, convert, crop, and filter images from a CSV file.")
-    parser.add_argument("--csv_file", type=Path, required=True, help="Path to the CSV file containing image URLs.")
-    parser.add_argument("--column", type=str, required=True, help="Column name in the CSV file containing URLs.")
+    parser = argparse.ArgumentParser(description="Download, convert, crop, and filter images.")
+    parser.add_argument("--input_type", type=str, required=True, choices=["csv", "png", "jpg"],
+                        help="Type of input data: 'csv' for URLs or 'png'/'jpg' for already-downloaded images.")
+    parser.add_argument("--csv_file", type=Path, help="Path to the CSV file containing image URLs.")
+    parser.add_argument("--csv_column", type=str, help="Column name in the CSV file containing URLs.")
+    parser.add_argument("--input_dirs", nargs="+", type=Path,
+                        help="Directories or files containing images to process (for 'png' or 'jpg' input type).")
     parser.add_argument("--output_dir", type=Path, required=True, help="Directory to save the processed images.")
     parser.add_argument("--download_dir", type=Path, default=None,
                         help="Directory to save downloaded images. Defaults to 'output_dir/download'.")
@@ -139,13 +163,21 @@ def main():
     parser.add_argument("--num_workers", type=int, default=4, help="Number of worker threads for parallel execution.")
 
     args = parser.parse_args()
-    download_dir = args.download_dir if args.download_dir else args.output_dir / "download"
 
-    print("Downloading images...")
-    image_files = download_images(args.csv_file, args.column, download_dir, args.num_workers)
+    # Handle input types
+    if args.input_type == "csv":
+        if not args.csv_file or not args.csv_column:
+            raise ValueError("For input_type 'csv', both --csv_file and --csv_column are required.")
+        download_dir = args.download_dir if args.download_dir else args.output_dir / "download"
+        print("Downloading images...")
+        input_files = download_images(args.csv_file, args.csv_column, download_dir, args.num_workers)
+    else:  # png or jpg
+        if not args.input_dirs:
+            raise ValueError("For input_type 'png' or 'jpg', --input_dirs is required.")
+        input_files = gather_input_images(args.input_dirs)
 
     print("Processing images...")
-    convert_and_filter_images(image_files, args.output_dir, args.compression, args.min_side,
+    convert_and_filter_images(input_files, args.output_dir, args.compression, args.min_side,
                               args.max_pixels, args.image_size, args.num_workers)
 
 
