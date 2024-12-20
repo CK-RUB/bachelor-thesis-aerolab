@@ -2,6 +2,7 @@ import abc
 from pathlib import Path
 from typing import Any, Optional
 
+import numpy as np
 import torch
 from joblib.memory import Memory
 from torch.utils.data import DataLoader
@@ -11,6 +12,9 @@ from tqdm import tqdm
 
 from aeroblade.data import ImageFolder
 from aeroblade.image import extract_patches
+
+from meaningful_image_complexity.measure_complexity import ComplexityMeasurer
+
 
 mem = Memory(location="cache", compress=("lz4", 9), verbose=0)
 
@@ -93,6 +97,61 @@ class JPEG(Complexity):
         return {f"jpeg_{self.quality}": result}
 
 
+@mem.cache(ignore=["num_workers"])
+def _compute_meaningful(
+    ds: ImageFolder, comp_meas_params: dict, patch_size: int, patch_stride: int, num_workers: int
+) -> torch.Tensor:
+    dl = DataLoader(ds, batch_size=1, num_workers=num_workers)
+
+    comp_meas = ComplexityMeasurer(**comp_meas_params)
+    image_results = []
+
+    for tensor, _ in tqdm(dl, desc="Computing Meaningful complexity", total=len(dl)):
+        if patch_size is None:
+            patches = [tensor[0]]
+        else:
+            patches = extract_patches(
+                array=tensor, size=patch_size, stride=patch_stride
+            )[0]
+
+        patch_results = []
+        for patch in patches:
+            patch_np = patch.squeeze().numpy()
+            complexity = comp_meas.interpret(patch_np)
+            patch_results.append(np.sum(complexity))
+        image_results.append(torch.tensor(patch_results, dtype=torch.float16))
+    return torch.stack(image_results)
+
+
+class Meaningful(Complexity):
+    def __init__(
+        self,
+        comp_meas_params: dict,
+        patch_size: Optional[int] = None,
+        patch_stride: Optional[int] = None,
+        num_workers: int = 0,
+    ) -> None:
+        """
+        comp_meas_params: Parameters for the ComplexityMeasurer.
+        """
+        self.comp_meas_params = comp_meas_params
+        self.patch_size = patch_size
+        self.patch_stride = patch_stride
+        self.num_workers = num_workers
+
+    def _compute(self, ds: ImageFolder) -> Any:
+        return _compute_meaningful(
+            ds=ds,
+            comp_meas_params=self.comp_meas_params,
+            patch_size=self.patch_size,
+            patch_stride=self.patch_stride,
+            num_workers=self.num_workers,
+        )
+
+    def _postprocess(self, result: Any) -> dict[str, torch.Tensor]:
+        return {"meaningful": result}
+
+
 def complexity_from_config(
     config: str, patch_size: int, patch_stride: int, batch_size: int, num_workers: int
 ) -> Complexity:
@@ -101,6 +160,21 @@ def complexity_from_config(
         _, quality = config.split("_")
         return JPEG(
             quality=int(quality),
+            patch_size=patch_size,
+            patch_stride=patch_stride,
+            num_workers=num_workers,
+        )
+    elif config == "meaningful":
+        comp_meas_params = {
+            "ncs_to_check": 8,
+            "n_cluster_inits": 1,
+            "nz": 2,
+            "num_levels": 4,
+            "cluster_model": "GMM",
+            "info_subsample": 0.3,
+        }
+        return Meaningful(
+            comp_meas_params=comp_meas_params,
             patch_size=patch_size,
             patch_stride=patch_stride,
             num_workers=num_workers,
