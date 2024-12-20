@@ -120,7 +120,7 @@ def _compute_meaningful(
             complexity = comp_meas.interpret(patch_np)
             patch_results.append(np.sum(complexity))
         image_results.append(torch.tensor(patch_results, dtype=torch.float16))
-    return torch.stack(image_results)
+    return torch.stack(image_results) / (patch.shape[1] * patch.shape[2])  # normalize
 
 
 class Meaningful(Complexity):
@@ -169,9 +169,10 @@ def complexity_from_config(
             "ncs_to_check": 8,
             "n_cluster_inits": 1,
             "nz": 2,
-            "num_levels": 4,
+            "num_levels": 2,
             "cluster_model": "GMM",
             "info_subsample": 0.3,
+            "suppress_all_prints": True
         }
         return Meaningful(
             comp_meas_params=comp_meas_params,
