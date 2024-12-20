@@ -264,7 +264,9 @@ pyrightconfig.json
 # End of https://www.toptal.com/developers/gitignore/api/jetbrains+all,python
 
 # Project specific / custom
+/aeroblade_output/
 /output/
 /cache/
 /data/
 !RAISE_1k.csv
+.python-version
