@@ -10,6 +10,9 @@ from torchvision.io import encode_jpeg
 from torchvision.transforms.v2.functional import convert_image_dtype
 from tqdm import tqdm
 
+import cv2
+from scipy.ndimage import convolve
+
 from aeroblade.data import ImageFolder
 from aeroblade.image import extract_patches
 
@@ -50,6 +53,7 @@ def _compute_jpeg(
     dl = DataLoader(ds, batch_size=1, num_workers=num_workers)
 
     image_results = []
+
     for tensor, _ in tqdm(dl, desc="Computing JPEG complexity", total=len(dl)):
         if patch_size is None:
             patches = [tensor[0]]
@@ -59,12 +63,13 @@ def _compute_jpeg(
             )[0]
 
         patch_results = []
+
         for patch in patches:
-            nbytes = len(
-                encode_jpeg(convert_image_dtype(patch, torch.uint8), quality=quality)
-            )
+            nbytes = len(encode_jpeg(convert_image_dtype(patch, torch.uint8), quality=quality))
             patch_results.append(nbytes)
+
         image_results.append(torch.tensor(patch_results, dtype=torch.float16))
+
     return torch.stack(image_results) / (patch.shape[1] * patch.shape[2])  # normalize
 
 
@@ -95,6 +100,78 @@ class JPEG(Complexity):
 
     def _postprocess(self, result: Any) -> dict[str, torch.Tensor]:
         return {f"jpeg_{self.quality}": result}
+
+
+def calculate_pixel_variance(image, neighborhood_size):
+    # Convert image to grayscale
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY).astype(float)
+    kernel = np.ones((neighborhood_size, neighborhood_size))
+    kernel /= kernel.size
+    mean = convolve(gray_image, kernel)
+    mean_sq = convolve(gray_image ** 2, kernel)
+
+    # var formula: variance = E[X^2] - (E[X])^2
+    variance_map = mean_sq - mean ** 2
+
+    return variance_map
+
+
+@mem.cache(ignore=["num_workers"])
+def _compute_variance(
+    ds: ImageFolder, patch_size: int, patch_stride: int, neighborhood_size: int, num_workers: int
+) -> torch.Tensor:
+    dl = DataLoader(ds, batch_size=1, num_workers=num_workers)
+
+    image_results = []
+
+    for tensor, _ in tqdm(dl, desc="Computing Variance complexity", total=len(dl)):
+        if patch_size is None:
+            patches = [tensor[0]]
+        else:
+            patches = extract_patches(
+                array=tensor, size=patch_size, stride=patch_stride
+            )[0]
+
+        patch_results = []
+
+        for patch in patches:
+            patch_np = patch.permute(1, 2, 0).numpy()  # Convert to HWC format for OpenCV
+            variance_map = calculate_pixel_variance(patch_np, neighborhood_size)
+            patch_variance = np.mean(variance_map)  # Aggregate variance for the patch
+            patch_results.append(patch_variance)
+
+        image_results.append(torch.tensor(patch_results, dtype=torch.float32))
+
+    return torch.stack(image_results) / (patch.shape[1] * patch.shape[2])  # normalize
+
+
+class Variance(Complexity):
+    def __init__(
+        self,
+        patch_size: Optional[int] = None,
+        patch_stride: Optional[int] = None,
+        neighborhood_size: int = 8,
+        num_workers: int = 0,
+    ) -> None:
+        """
+        Variance complexity metric with neighborhood variance.
+        """
+        self.patch_size = patch_size
+        self.patch_stride = patch_stride
+        self.neighborhood_size = neighborhood_size
+        self.num_workers = num_workers
+
+    def _compute(self, ds: ImageFolder) -> Any:
+        return _compute_variance(
+            ds=ds,
+            patch_size=self.patch_size,
+            patch_stride=self.patch_stride,
+            neighborhood_size=self.neighborhood_size,
+            num_workers=self.num_workers,
+        )
+
+    def _postprocess(self, result: Any) -> dict[str, torch.Tensor]:
+        return {"variance": result}
 
 
 # Wrap the meaningful complexity interpret method with caching
@@ -174,8 +251,15 @@ def complexity_from_config(
     """Parse config string and return matching complexity metric."""
     if config.startswith("jpeg"):
         _, quality = config.split("_")
+
         return JPEG(
             quality=int(quality),
+            patch_size=patch_size,
+            patch_stride=patch_stride,
+            num_workers=num_workers,
+        )
+    elif config == "variance":
+        return Variance(
             patch_size=patch_size,
             patch_stride=patch_stride,
             num_workers=num_workers,
