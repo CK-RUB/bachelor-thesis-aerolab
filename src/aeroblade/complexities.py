@@ -97,13 +97,20 @@ class JPEG(Complexity):
         return {f"jpeg_{self.quality}": result}
 
 
+# Wrap the meaningful complexity interpret method with caching
+@mem.cache
+def cached_meaningful_interpret(comp_meas_params, patch_np):
+    comp_meas = ComplexityMeasurer(**comp_meas_params)
+
+    return comp_meas.interpret(patch_np)
+
+
 @mem.cache(ignore=["num_workers"])
 def _compute_meaningful(
     ds: ImageFolder, comp_meas_params: dict, patch_size: int, patch_stride: int, num_workers: int
 ) -> torch.Tensor:
     dl = DataLoader(ds, batch_size=1, num_workers=num_workers)
 
-    comp_meas = ComplexityMeasurer(**comp_meas_params)
     image_results = []
 
     for tensor, _ in tqdm(dl, desc="Computing Meaningful complexity", total=len(dl)):
@@ -115,11 +122,20 @@ def _compute_meaningful(
             )[0]
 
         patch_results = []
+
         for patch in patches:
             patch_np = patch.squeeze().numpy()
-            complexity = comp_meas.interpret(patch_np)
+
+            # Check if the patch is uniform
+            if patch_np.min() == patch_np.max():
+                complexity = 0
+            else:
+                complexity = cached_meaningful_interpret(comp_meas_params, patch_np)
+
             patch_results.append(np.sum(complexity))
+
         image_results.append(torch.tensor(patch_results, dtype=torch.float16))
+
     return torch.stack(image_results) / (patch.shape[1] * patch.shape[2])  # normalize
 
 
@@ -169,11 +185,12 @@ def complexity_from_config(
             "ncs_to_check": 8,
             "n_cluster_inits": 1,
             "nz": 2,
-            "num_levels": 2,
+            "num_levels": 4,
             "cluster_model": "GMM",
             "info_subsample": 0.3,
             "suppress_all_prints": True
         }
+
         return Meaningful(
             comp_meas_params=comp_meas_params,
             patch_size=patch_size,

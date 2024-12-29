@@ -153,11 +153,13 @@ class ComplexityMeasurer():
                     self.cluster_labels = self.model.fit_predict(x)
                     break
                 except ValueError:
-                    print(f'failed to cluster with {nc} components, and reg_covar {self.model.reg_covar}')
+                    if not self.suppress_all_prints:
+                        print(f'failed to cluster with {nc} components, and reg_covar {self.model.reg_covar}')
                     self.model.reg_covar *= 10
                     if self.model.reg_covar > 10:
                         breakpoint()
-                    print(f'trying again with reg_covar {self.model.reg_covar}')
+                    if not self.suppress_all_prints:
+                        print(f'trying again with reg_covar {self.model.reg_covar}')
             found_nc = len(np.unique(self.cluster_labels))
             if nc > 1 and self.display_scattered_clusters:
                 scatter_clusters(x, self.best_cluster_labels.flatten(), show=True)
