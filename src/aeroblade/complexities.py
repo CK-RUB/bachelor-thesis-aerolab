@@ -13,7 +13,7 @@ from tqdm import tqdm
 from aeroblade.data import ImageFolder
 from aeroblade.image import extract_patches
 
-from meaningful_image_complexity.measure_complexity import ComplexityMeasurer
+from meaningful_complexity.measure_complexity import ComplexityMeasurer
 
 
 mem = Memory(location="cache", compress=("lz4", 9), verbose=0)

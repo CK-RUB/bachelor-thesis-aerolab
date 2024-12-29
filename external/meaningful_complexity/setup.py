@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="meaningful_image_complexity",
+    name="meaningful_complexity",
     version="0.1",
     description="A module to compute meaningful image complexity.",
     author="Louis Mahon and Thomas Lukasiewicz",
