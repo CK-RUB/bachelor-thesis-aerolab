@@ -16,7 +16,7 @@ from scipy.ndimage import convolve
 from aeroblade.data import ImageFolder
 from aeroblade.image import extract_patches
 
-from meaningful_complexity.measure_complexity import ComplexityMeasurer
+from aeroblade.external.meaningful_complexity import MeaningfulComplexity
 
 
 mem = Memory(location="cache", compress=("lz4", 9), verbose=0)
@@ -177,7 +177,7 @@ class Variance(Complexity):
 # Wrap the meaningful complexity interpret method with caching
 @mem.cache
 def cached_meaningful_interpret(comp_meas_params, patch_np):
-    comp_meas = ComplexityMeasurer(**comp_meas_params)
+    comp_meas = MeaningfulComplexity(**comp_meas_params)
 
     return comp_meas.interpret(patch_np)
 

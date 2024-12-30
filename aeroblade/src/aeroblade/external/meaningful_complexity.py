@@ -1,3 +1,19 @@
+# This code is adapted from:
+# @article{mahon2024minimum,
+# title = {Minimum description length clustering to measure meaningful image complexity},
+# journal = {Pattern Recognition},
+# volume = {145},
+# pages = {109889},
+# year = {2024},
+# issn = {0031-3203},
+# doi = {https://doi.org/10.1016/j.patcog.2023.109889},
+# url = {https://www.sciencedirect.com/science/article/pii/S0031320323005873},
+# author = {Louis Mahon and Thomas Lukasiewicz},
+# }
+#
+# GitHub Repository: https://github.com/Lou1sM/meaningful_image_complexity
+
+
 from time import time
 from scipy.stats import entropy
 from matplotlib.colors import BASE_COLORS
@@ -8,11 +24,11 @@ from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy import log, log2
-#import skfuzzy as fuzz
+import skfuzzy as fuzz
 
 
 PALETTE = list(BASE_COLORS.values()) + [(0,0.5,1),(1,0.5,0)]
-class ComplexityMeasurer():
+class MeaningfulComplexity():
     def __init__(self, ncs_to_check, num_levels, n_cluster_inits, nz, cluster_model, info_subsample,
                  print_times=False, verbose=False, display_cluster_label_imgs=False, compare_to_true_entropy=False,
                  display_scattered_clusters=False, suppress_all_prints=False, no_cluster_idxify=False):
