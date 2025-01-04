@@ -22,6 +22,8 @@ def download_image(url, download_dir):
     try:
         response = requests.get(url, stream=True)
         response.raise_for_status()
+
+        # Extract filename without query parameters
         filename = download_dir / Path(url.split('?')[0]).name
 
         # Filter by extension before saving
@@ -29,6 +31,12 @@ def download_image(url, download_dir):
             print(f"Unsupported file type for URL {url}: {filename.suffix}")
 
             return None
+
+        # Check if the file already exists and append a number if necessary
+        counter = 1
+
+        while filename.exists():
+            filename = download_dir / f"{filename.stem}_{counter}{filename.suffix}"
 
         with open(filename, "wb") as f:
             for chunk in response.iter_content(1024):
