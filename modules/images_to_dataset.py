@@ -4,7 +4,7 @@ import requests
 from PIL import Image
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from tqdm import tqdm  # For progress bars
+from tqdm import tqdm
 
 
 def download_image(url, download_dir):
@@ -18,40 +18,61 @@ def download_image(url, download_dir):
     Returns:
         Path or None: Path to the downloaded file if successful, otherwise None.
     """
+
     try:
         response = requests.get(url, stream=True)
         response.raise_for_status()
         filename = download_dir / Path(url.split('?')[0]).name
+
+        # Filter by extension before saving
+        if filename.suffix.lower() not in Image.registered_extensions():
+            print(f"Unsupported file type for URL {url}: {filename.suffix}")
+
+            return None
+
         with open(filename, "wb") as f:
             for chunk in response.iter_content(1024):
                 f.write(chunk)
+
         return filename
     except Exception as e:
         print(f"Failed to download {url}: {e}")
+
         return None
 
 
-def download_images(csv_file, csv_column, download_dir, num_workers=4):
+def download_images(input_file, file_type, column_name, download_dir, num_workers):
     """
-    Downloads images from URLs provided in a specified CSV column using multithreading.
+    Downloads images from URLs provided in a TXT or CSV file using multithreading.
 
     Args:
-        csv_file (Path): Path to the CSV file containing image URLs.
-        csv_column (str): Name of the column in the CSV file that contains URLs.
+        input_file (Path): Path to the TXT or CSV file containing image URLs.
+        file_type (str): Type of the input file ('txt' or 'csv').
+        column_name (str): Name of the column in the CSV file that contains URLs (only used if file_type is 'csv').
         download_dir (Path): Directory where the downloaded images will be saved.
         num_workers (int): Number of worker threads for downloading.
 
     Returns:
         list: A list of file paths for the successfully downloaded images.
     """
+
     download_dir.mkdir(parents=True, exist_ok=True)
-    urls = pd.read_csv(csv_file)[csv_column]
+
+    if file_type == "txt":
+        urls = input_file.read_text().splitlines()
+    elif file_type == "csv":
+        urls = pd.read_csv(input_file)[column_name]
+    else:
+        raise ValueError("Unsupported file type. Only 'txt' and 'csv' are allowed.")
+
     downloaded_files = []
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = [executor.submit(download_image, url, download_dir) for url in urls]
+
         for future in tqdm(as_completed(futures), total=len(urls), desc="Downloading images"):
             result = future.result()
+
             if result:
                 downloaded_files.append(result)
 
@@ -60,7 +81,7 @@ def download_images(csv_file, csv_column, download_dir, num_workers=4):
 
 def gather_input_images(input_dirs):
     """
-    Gathers all image files (PNG, JPG) from the provided input directories or files.
+    Gathers all supported image files from the provided input directories or files.
 
     Args:
         input_dirs (list): List of directories or files to gather images from.
@@ -68,24 +89,35 @@ def gather_input_images(input_dirs):
     Returns:
         list: A list of file paths to the gathered images.
     """
+
     input_files = []
+
     for path in input_dirs:
         p = Path(path)
+
         if p.is_dir():
-            input_files.extend(list(p.glob("**/*.png")) + list(p.glob("**/*.jpg")))
-        elif p.is_file() and (p.suffix.lower() in [".png", ".jpg"]):
+            input_files.extend(list(p.rglob("*")))
+        elif p.is_file():
             input_files.append(p)
-    return input_files
 
+    valid_files = []
 
-def convert_and_filter_image(input_file, output_dir, compression_level, min_side, max_pixels, image_size):
+    for f in input_files:
+        if f.suffix.lower() in Image.registered_extensions():
+            valid_files.append(f)
+        else:
+            print(f"Unsupported file type for file {f}: {f.suffix}")
+
+    return valid_files
+
+def convert_and_filter_image(input_file, output_file, compression, min_side, max_pixels, image_size):
     """
-    Processes a single image: crops, converts to PNG, and filters by size criteria.
+    Processes a single image: crops, converts, and filters by size criteria.
 
     Args:
         input_file (Path): Path to the input image.
-        output_dir (Path): Directory where the processed image will be saved.
-        compression_level (int): PNG compression level (0-9).
+        output_file (Path): Path to save the processed image.
+        compression (int): Compression level (0-100 for JPG, 0-9 for PNG).
         min_side (int): Minimum allowed size of the smaller side.
         max_pixels (int): Maximum total number of pixels.
         image_size (int): Size of the square center crop.
@@ -93,6 +125,7 @@ def convert_and_filter_image(input_file, output_dir, compression_level, min_side
     Returns:
         Path or None: Path to the processed file if successful, otherwise None.
     """
+
     try:
         with Image.open(input_file) as img:
             width, height = img.size
@@ -106,23 +139,26 @@ def convert_and_filter_image(input_file, output_dir, compression_level, min_side
                 top = (img.height - crop_size) // 2
                 img = img.crop((left, top, left + crop_size, top + crop_size))
 
-                output_file = output_dir / input_file.with_suffix(".png").name
-                img.save(output_file, format="PNG", compress_level=compression_level)
+                img.save(output_file, quality=compression if output_file.suffix == ".jpg" else None,
+                         compress_level=compression if output_file.suffix == ".png" else None)
+
                 return output_file
     except Exception as e:
         print(f"Failed to process {input_file}: {e}")
+
     return None
 
 
-def convert_and_filter_images(input_files, output_dir, compression_level=6, min_side=None, max_pixels=None,
-                              image_size=512, num_workers=4):
+def convert_and_filter_images(input_files, output_dir, output_type, compression, min_side, max_pixels,
+                              image_size, num_workers):
     """
-    Processes images in parallel: crops, converts to PNG, and filters by size criteria.
+    Processes images in parallel: crops, converts, and filters by size criteria.
 
     Args:
-        input_files (list): List of file paths to the downloaded images.
-        output_dir (Path): Directory where the processed .png images will be saved.
-        compression_level (int): PNG compression level (0-9).
+        input_files (list): List of file paths to the input images.
+        output_dir (Path): Directory where the processed images will be saved.
+        output_type (str): Output image format ('png' or 'jpg').
+        compression (int): Compression level (0-100 for JPG, 0-9 for PNG).
         min_side (int): Minimum allowed size of the smaller side.
         max_pixels (int): Maximum total number of pixels.
         image_size (int): Size of the square center crop.
@@ -131,14 +167,26 @@ def convert_and_filter_images(input_files, output_dir, compression_level=6, min_
     Returns:
         list: A list of file paths for successfully processed images.
     """
+
     output_dir.mkdir(parents=True, exist_ok=True)
     processed_files = []
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        futures = [executor.submit(convert_and_filter_image, file, output_dir, compression_level,
-                                   min_side, max_pixels, image_size) for file in input_files]
+        futures = [
+            executor.submit(
+                convert_and_filter_image,
+                file,
+                output_dir / file.with_suffix(f".{output_type}").name,
+                compression,
+                min_side,
+                max_pixels,
+                image_size
+            ) for file in input_files
+        ]
+
         for future in tqdm(as_completed(futures), total=len(input_files), desc="Processing images"):
             result = future.result()
+
             if result:
                 processed_files.append(result)
 
@@ -147,37 +195,60 @@ def convert_and_filter_images(input_files, output_dir, compression_level=6, min_
 
 def main():
     parser = argparse.ArgumentParser(description="Download, convert, crop, and filter images.")
-    parser.add_argument("--input_type", type=str, required=True, choices=["csv", "png", "jpg"],
-                        help="Type of input data: 'csv' for URLs or 'png'/'jpg' for already-downloaded images.")
-    parser.add_argument("--csv_file", type=Path, help="Path to the CSV file containing image URLs.")
-    parser.add_argument("--csv_column", type=str, help="Column name in the CSV file containing URLs.")
-    parser.add_argument("--input_dirs", nargs="+", type=Path,
-                        help="Directories or files containing images to process (for 'png' or 'jpg' input type).")
-    parser.add_argument("--output_dir", type=Path, required=True, help="Directory to save the processed images.")
-    parser.add_argument("--download_dir", type=Path, default=None,
-                        help="Directory to save downloaded images. Defaults to 'output_dir/download'.")
-    parser.add_argument("--compression", type=int, default=6, help="PNG compression level (0-9).")
-    parser.add_argument("--min_side", type=int, default=None, help="Minimum size of the smaller side (optional).")
-    parser.add_argument("--max_pixels", type=int, default=None, help="Maximum total number of pixels (optional).")
-    parser.add_argument("--image_size", type=int, default=512, help="Size of the square center crop (default: 512 px).")
-    parser.add_argument("--num_workers", type=int, default=4, help="Number of worker threads for parallel execution.")
+
+    parser.add_argument("--input_type", type=str, required=True, choices=["csv", "txt", "file"],
+                        help="Type of input data. Choices: 'csv', 'txt', 'file'. Required.")
+    parser.add_argument("--input_file", type=Path, required=False,
+                        help="Path to the TXT or CSV file containing image URLs. Required for 'csv' or 'txt'.")
+    parser.add_argument("--csv_column", type=str, required=False,
+                        help="Column name in the CSV file containing URLs. Required for 'csv'.")
+    parser.add_argument("--input_dirs", nargs="+", type=Path, required=False,
+                        help="Directories or files containing images to process. Required for 'file'.")
+    parser.add_argument("--output_dir", type=Path, required=True,
+                        help="Directory to save the processed images. Required.")
+    parser.add_argument("--download_dir", type=Path, required=False, default=None,
+                        help="Directory to save downloaded images. Defaults to 'output_dir/download'. Optional.")
+    parser.add_argument("--output_type", type=str, required=True, choices=["png", "jpg"],
+                        help="Output image format. Choices: 'png', 'jpg'. Required.")
+    parser.add_argument("--compression", type=int, required=True,
+                        help="Compression level. Range: 0-100 for JPG or 0-9 for PNG. Required.")
+    parser.add_argument("--min_side", type=int, default=None, required=False,
+                        help="Minimum size of the smaller side. Default: None. Optional.")
+    parser.add_argument("--max_pixels", type=int, default=None, required=False,
+                        help="Maximum total number of pixels. Default: None. Optional.")
+    parser.add_argument("--image_size", type=int, default=512, required=False,
+                        help="Size of the square center crop. Default: 512 pixels. Optional.")
+    parser.add_argument("--num_workers", type=int, default=64, required=False,
+                        help="Number of worker threads for parallel execution. Default: 64. Optional.")
+    parser.add_argument("--download_only", action="store_true", required=False, default=False,
+                        help="If set, only downloads images and skips processing. Applicable for 'csv' or 'txt'. Optional.")
 
     args = parser.parse_args()
 
-    # Handle input types
-    if args.input_type == "csv":
-        if not args.csv_file or not args.csv_column:
-            raise argparse.ArgumentTypeError("For input_type 'csv', both --csv_file and --csv_column are required.")
+    if args.input_type in ["csv", "txt"]:
+        if not args.input_file:
+            raise argparse.ArgumentTypeError(f"For input_type '{args.input_type}', --input_file is required.")
+
+        if args.input_type == "csv" and not args.csv_column:
+            raise argparse.ArgumentTypeError("For input_type 'csv', --csv_column is required.")
+
         download_dir = args.download_dir if args.download_dir else args.output_dir / "download"
-        print("Downloading images...")
-        input_files = download_images(args.csv_file, args.csv_column, download_dir, args.num_workers)
-    else:  # png or jpg
+        print(f"Downloading images from {args.input_type.upper()}...")
+        input_files = download_images(args.input_file, args.input_type, args.csv_column, download_dir, args.num_workers)
+
+        if args.download_only:
+            print("Download only mode enabled. Skipping processing.")
+
+            return
+    else:  # input_type == "file"
         if not args.input_dirs:
-            raise argparse.ArgumentTypeError("For input_type 'png' or 'jpg', --input_dirs is required.")
+            raise argparse.ArgumentTypeError("For input_type 'file', --input_dirs is required.")
+
+        print("Gathering input images...")
         input_files = gather_input_images(args.input_dirs)
 
     print("Processing images...")
-    convert_and_filter_images(input_files, args.output_dir, args.compression, args.min_side,
+    convert_and_filter_images(input_files, args.output_dir, args.output_type, args.compression, args.min_side,
                               args.max_pixels, args.image_size, args.num_workers)
 
 
