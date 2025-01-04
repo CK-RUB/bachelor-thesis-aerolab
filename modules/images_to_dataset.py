@@ -167,13 +167,13 @@ def main():
     # Handle input types
     if args.input_type == "csv":
         if not args.csv_file or not args.csv_column:
-            raise ValueError("For input_type 'csv', both --csv_file and --csv_column are required.")
+            raise argparse.ArgumentTypeError("For input_type 'csv', both --csv_file and --csv_column are required.")
         download_dir = args.download_dir if args.download_dir else args.output_dir / "download"
         print("Downloading images...")
         input_files = download_images(args.csv_file, args.csv_column, download_dir, args.num_workers)
     else:  # png or jpg
         if not args.input_dirs:
-            raise ValueError("For input_type 'png' or 'jpg', --input_dirs is required.")
+            raise argparse.ArgumentTypeError("For input_type 'png' or 'jpg', --input_dirs is required.")
         input_files = gather_input_images(args.input_dirs)
 
     print("Processing images...")
