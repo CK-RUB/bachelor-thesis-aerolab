@@ -1,22 +1,21 @@
 import argparse
+import pandas as pd
+import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from PIL import Image
+from tqdm import tqdm
 from urllib.parse import urlparse
 
-import requests
-from PIL import Image
-import pandas as pd
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from tqdm import tqdm
-import os
 
-
-def download_image(url, download_dir):
+def download_image(url, download_dir, suppress_prints=False):
     """
     Downloads a single image from a URL and saves it in the specified directory.
 
     Args:
         url (str): URL of the image to download.
         download_dir (Path): Directory to save the downloaded image.
+        suppress_prints (bool): If True, suppresses all prints.
 
     Returns:
         Path or None: Path to the downloaded file if successful, otherwise None.
@@ -38,7 +37,8 @@ def download_image(url, download_dir):
 
         # Filter by extension before saving
         if filename.suffix.lower() not in Image.registered_extensions():
-            print(f"Unsupported file type for URL {url}: {filename.suffix}")
+            if not suppress_prints:
+                print(f"Unsupported file type for URL {url}: {filename.suffix}")
 
             return None
 
@@ -55,22 +55,24 @@ def download_image(url, download_dir):
 
         return filename
     except Exception as e:
-        print(f"Failed to download {url}: {e}")
+        if not suppress_prints:
+            print(f"Failed to download {url}: {e}")
 
         return None
 
 
-def download_images(input_file, file_type, column_name, download_dir, num_workers, n_first):
+def download_images(file_type, input_file, column_name, download_dir, num_workers, n_first, suppress_prints=False):
     """
     Downloads images from URLs provided in a TXT or CSV file using multithreading.
 
     Args:
-        input_file (Path): Path to the TXT or CSV file containing image URLs.
         file_type (str): Type of the input file ('txt' or 'csv').
+        input_file (Path): Path to the TXT or CSV file containing image URLs.
         column_name (str): Name of the column in the CSV file that contains URLs (only used if file_type is 'csv').
         download_dir (Path): Directory where the downloaded images will be saved.
         num_workers (int): Number of worker threads for downloading.
         n_first (int): If specified, only download the first n images.
+        suppress_prints (bool): If True, suppresses all prints.
 
     Returns:
         list: A list of file paths for the successfully downloaded images.
@@ -80,17 +82,15 @@ def download_images(input_file, file_type, column_name, download_dir, num_worker
 
     if file_type == "txt":
         urls = input_file.read_text().splitlines()[:n_first] if n_first else input_file.read_text().splitlines()
-    elif file_type == "csv":
-        urls = pd.read_csv(input_file)[column_name][:n_first] if n_first else pd.read_csv(input_file)[column_name]
     else:
-        raise ValueError("Unsupported file type. Only 'txt' and 'csv' are allowed.")
+        urls = pd.read_csv(input_file)[column_name][:n_first] if n_first else pd.read_csv(input_file)[column_name]
 
     downloaded_files = []
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        futures = [executor.submit(download_image, url, download_dir) for url in urls]
+        futures = [executor.submit(download_image, url, download_dir, suppress_prints) for url in urls]
 
-        for future in tqdm(as_completed(futures), total=len(urls), desc="Downloading images"):
+        for future in tqdm(as_completed(futures), total=len(urls), desc="Downloading images", disable=suppress_prints):
             result = future.result()
 
             if result:
@@ -99,13 +99,14 @@ def download_images(input_file, file_type, column_name, download_dir, num_worker
     return downloaded_files
 
 
-def gather_local_images(input_dirs, n_first):
+def gather_local_images(input_dirs, n_first, suppress_prints=False):
     """
     Gathers all supported image files from the provided input directories or files.
 
     Args:
         input_dirs (list): List of directories or files to gather images from.
         n_first (int): If specified, only gather the first n images.
+        suppress_prints (bool): If True, suppresses all prints.
 
     Returns:
         list: A list of file paths to the gathered images.
@@ -127,22 +128,24 @@ def gather_local_images(input_dirs, n_first):
         if f.suffix.lower() in Image.registered_extensions():
             valid_files.append(f)
         else:
-            print(f"Unsupported file type for file {f}: {f.suffix}")
+            if not suppress_prints:
+                print(f"Unsupported file type for file {f}: {f.suffix}")
 
     return valid_files[:n_first] if n_first else valid_files
 
 
-def process_image(input_file, output_file, compression, min_side, max_pixels, image_size):
+def process_image(input_file, output_file, compression, min_side, max_pixels, image_size, suppress_prints=False):
     """
     Processes a single image: crops, converts, and filters by size criteria.
 
     Args:
         input_file (Path): Path to the input image.
         output_file (Path): Path to save the processed image.
-        compression (int): Compression level (0-100 for JPG, 0-9 for PNG).
+        compression (int): Compression level (0-95 for JPG, 0-9 for PNG).
         min_side (int): Minimum allowed size of the smaller side.
         max_pixels (int): Maximum total number of pixels.
         image_size (int): Size of the square center crop.
+        suppress_prints (bool): If True, suppresses all prints.
 
     Returns:
         Path or None: Path to the processed file if successful, otherwise None.
@@ -167,26 +170,28 @@ def process_image(input_file, output_file, compression, min_side, max_pixels, im
 
                 return output_file
     except Exception as e:
-        print(f"Failed to process {input_file}: {e}")
+        if not suppress_prints:
+            print(f"Failed to process {input_file}: {e}")
 
     return None
 
 
-def process_images(input_files, output_dir, output_type, compression, min_side, max_pixels,
-                   image_size, num_workers, input_dirs):
+def process_images(input_files, input_dirs, output_type, output_dir, compression, min_side, max_pixels,
+                   image_size, num_workers, suppress_prints=False):
     """
     Processes images in parallel: crops, converts, and filters by size criteria.
 
     Args:
         input_files (list): List of file paths to the input images.
-        output_dir (Path): Directory where the processed images will be saved.
+        input_dirs (list): List of input directories for calculating relative paths.
         output_type (str): Output image format ('png' or 'jpg').
-        compression (int): Compression level (0-100 for JPG, 0-9 for PNG).
+        output_dir (Path): Directory where the processed images will be saved.
+        compression (int): Compression level (0-95 for JPG, 0-9 for PNG).
         min_side (int): Minimum allowed size of the smaller side.
         max_pixels (int): Maximum total number of pixels.
         image_size (int): Size of the square center crop.
         num_workers (int): Number of worker threads for processing.
-        input_dirs (list): List of input directories for calculating relative paths.
+        suppress_prints (bool): If True, suppresses all prints.
 
     Returns:
         list: A list of Path objects for the directories containing the successfully processed images.
@@ -232,12 +237,13 @@ def process_images(input_files, output_dir, output_type, compression, min_side, 
                 compression,
                 min_side,
                 max_pixels,
-                image_size
+                image_size,
+                suppress_prints
             )
 
             futures_to_dirs[futures] = specific_output_dir
 
-        for future in tqdm(as_completed(futures_to_dirs), total=len(futures_to_dirs), desc="Processing images"):
+        for future in tqdm(as_completed(futures_to_dirs), total=len(futures_to_dirs), desc="Processing images", disable=suppress_prints):
             result = future.result()
             specific_output_dir = futures_to_dirs[future]
 
@@ -247,23 +253,129 @@ def process_images(input_files, output_dir, output_type, compression, min_side, 
     return dataset_dirs
 
 
+def raise_value_error(error_message, cli_context=True):
+    if cli_context:
+        raise argparse.ArgumentTypeError(error_message)
+    else:
+        raise ValueError(error_message)
+
+
+def create_dataset(input_types, input_csvs, csv_columns, input_txts, input_dirs, output_type, output_dir, download_dir,
+                   compression, min_side, max_pixels, image_size=512, num_workers=64, download_only=False, n_first=None,
+                   suppress_prints=False, cli_context=False):
+    images_for_processing = []
+    input_dirs_for_processing = []
+
+    if compression is None:
+        compression = 75 if output_type == "jpg" else 6
+    else:
+        if output_type == "jpg":
+            if not 0 <= compression <= 95:
+                raise_value_error("Compression level must be between 0 and 95 for JPG.", cli_context=cli_context)
+        if output_type == "png":
+            if not 0 <= compression <= 9:
+                raise_value_error("Compression level must be between 0 and 9 for PNG.", cli_context=cli_context)
+
+    download_dir = download_dir if download_dir else output_dir / "download"
+
+    if "txt" in input_types:
+        if not input_txts:
+            raise_value_error(f"For input_type 'txt', --input_txts is required.", cli_context=cli_context)
+
+        if not suppress_prints:
+            print(f"Downloading images from {input_types.upper()}...")
+
+        for input_txt in input_txts:
+            images_for_processing.extend(download_images("txt", input_txt, "", download_dir, num_workers, n_first, suppress_prints))
+
+    if "csv" in input_types:
+        if not input_csvs:
+            raise_value_error(f"For input_type 'csv', --input_csvs is required.", cli_context=cli_context)
+
+        if not csv_columns:
+            raise_value_error(f"For input_type 'csv', --csv_columns is required.", cli_context=cli_context)
+
+        if len(input_csvs) != len(csv_columns):
+            raise_value_error(f"Number of --input_csvs and --csv_columns must be the same.", cli_context=cli_context)
+
+        if not suppress_prints:
+            print(f"Downloading images from {input_types.upper()}...")
+
+        for input_csv, column_name in zip(input_csvs, csv_columns):
+            images_for_processing.extend(download_images("csv", input_csv, column_name, download_dir, num_workers, n_first, suppress_prints))
+
+    if input_types in ["txt", "csv"]:
+        input_dirs_for_processing.extend([download_dir])
+
+        if not suppress_prints:
+            print("Downloaded images saved to:", download_dir)
+
+    if download_only:
+        if not suppress_prints:
+            print("Download only mode enabled. Skipping processing.")
+
+        return
+
+    if "file" in input_types:
+        if not input_dirs:
+            raise_value_error(f"For input_type 'file', --input_dirs is required.", cli_context=cli_context)
+
+        if not suppress_prints:
+            print("Gathering input images...")
+
+        images_for_processing.extend(gather_local_images(input_dirs, n_first, suppress_prints))
+        input_dirs_for_processing.extend(input_dirs)
+
+    if not suppress_prints:
+        print("Processing images...")
+
+    dataset_dirs = process_images(
+        input_files=images_for_processing,
+        input_dirs=input_dirs_for_processing,
+        output_type=output_type,
+        output_dir=output_dir,
+        compression=compression,
+        min_side=min_side,
+        max_pixels=max_pixels,
+        image_size=image_size,
+        num_workers=num_workers,
+        suppress_prints=suppress_prints
+    )
+
+    if not suppress_prints:
+        print("Processed Dataset Directories:")
+        print("-----------------------------")
+
+    for directory in dataset_dirs:
+        print(directory)
+
+    return dataset_dirs
+
+
 def main():
     parser = argparse.ArgumentParser(description="Download, convert, crop, and filter images.")
 
-    parser.add_argument("--input_type", type=str, required=True, choices=["csv", "txt", "file"],
+    # Input Args
+    parser.add_argument("--input_types", nargs="+", type=str, required=True, choices=["csv", "txt", "file"],
                         help="Type of input data. Choices: 'csv', 'txt', 'file'. Required.")
-    parser.add_argument("--input_file", type=Path, required=False,
-                        help="Path to the TXT or CSV file containing image URLs. Required for 'csv' or 'txt'.")
-    parser.add_argument("--csv_column", type=str, required=False,
-                        help="Column name in the CSV file containing URLs. Required for 'csv'.")
+    parser.add_argument("--input_csvs", nargs="+", type=Path, required=False,
+                        help="Path to CSV files containing image URLs. Required for 'csv'.")
+    parser.add_argument("--csv_columns", nargs="+", type=str, required=False,
+                        help="Column names in the CSV files containing URLs. Required for 'csv'.")
+    parser.add_argument("--input_txts", nargs="+", type=Path, required=False,
+                        help="Path to the TXT or CSV file containing image URLs. Required for 'txt'.")
     parser.add_argument("--input_dirs", nargs="+", type=Path, required=False,
                         help="Directories or files containing images to process. Required for 'file'.")
-    parser.add_argument("--output_dir", type=Path, required=True,
-                        help="Directory to save the processed images. Required.")
-    parser.add_argument("--download_dir", type=Path, required=False, default=None,
-                        help="Directory to save downloaded images. Defaults to 'output_dir/download'. Optional.")
+
+    # Output Args
     parser.add_argument("--output_type", type=str, default="png", required=False, choices=["png", "jpg"],
                         help="Output image format. Choices: 'png', 'jpg'. Default: 'png'. Optional.")
+    parser.add_argument("--output_dir", type=Path, required=True,
+                        help="Directory to save the processed images. Required.")
+    parser.add_argument("--download_dir", type=Path, default=None, required=False,
+                        help="Directory to save downloaded images. Defaults to 'output_dir/download'. Optional.")
+
+    # Processing Args
     parser.add_argument("--compression", type=int, default=None, required=False,
                         help="Compression level. Range: 0-95 for JPG or 0-9 for PNG. Default: 75 or 6. Optional.")
     parser.add_argument("--min_side", type=int, default=None, required=False,
@@ -272,56 +384,38 @@ def main():
                         help="Maximum total number of pixels. Default: None. Optional.")
     parser.add_argument("--image_size", type=int, default=512, required=False,
                         help="Size of the square center crop. Default: 512 pixels. Optional.")
+
+    # Execution Args
     parser.add_argument("--num_workers", type=int, default=64, required=False,
                         help="Number of worker threads for parallel execution. Default: 64. Optional.")
     parser.add_argument("--download_only", action="store_true", required=False, default=False,
                         help="If set, only downloads images and skips processing. Applicable for 'csv' or 'txt'. Optional.")
-    parser.add_argument("--n_first", type=int, required=False, default=None,
+    parser.add_argument("--n_first", type=int, default=None, required=False,
                         help="If specified, restricts downloading and processing to the first n images. Optional.")
+    parser.add_argument("--supress_prints", action="store_true", required=False, default=False,
+                        help="If set, suppresses all prints. Optional.")
 
     args = parser.parse_args()
 
-    if args.compression is None:
-        args.compression = 75 if args.output_type == "jpg" else 6
-    else:
-        if args.output_type == "jpg":
-            if not 0 <= args.compression <= 95:
-                raise argparse.ArgumentTypeError("Compression level must be between 0 and 95 for JPG.")
-        if args.output_type == "png":
-            if not 0 <= args.compression <= 9:
-                raise argparse.ArgumentTypeError("Compression level must be between 0 and 9 for PNG.")
-
-    if args.input_type in ["csv", "txt"]:
-        if not args.input_file:
-            raise argparse.ArgumentTypeError(f"For input_type '{args.input_type}', --input_file is required.")
-
-        if args.input_type == "csv" and not args.csv_column:
-            raise argparse.ArgumentTypeError("For input_type 'csv', --csv_column is required.")
-
-        download_dir = args.download_dir if args.download_dir else args.output_dir / "download"
-        print(f"Downloading images from {args.input_type.upper()}...")
-        input_files = download_images(args.input_file, args.input_type, args.csv_column, download_dir, args.num_workers, args.n_first)
-        input_dirs = [download_dir]
-
-        if args.download_only:
-            print("Download only mode enabled. Skipping processing.")
-
-            return
-    else:  # input_type == "file"
-        if not args.input_dirs:
-            raise argparse.ArgumentTypeError("For input_type 'file', --input_dirs is required.")
-
-        print("Gathering input images...")
-        input_dirs = args.input_dirs
-        input_files = gather_local_images(args.input_dirs, args.n_first)
-
-    print("Processing images...")
-    dataset_dirs = process_images(input_files, args.output_dir, args.output_type, args.compression, args.min_side,
-                   args.max_pixels, args.image_size, args.num_workers, input_dirs)
-
-    print("Processed Dataset Directories:")
-    for directory in dataset_dirs:
-        print(directory)
+    create_dataset(
+        input_types=args.input_types,
+        input_csvs=args.input_csvs,
+        csv_columns=args.csv_columns,
+        input_txts=args.input_txts,
+        input_dirs=args.input_dirs,
+        output_type=args.output_type,
+        output_dir=args.output_dir,
+        download_dir=args.download_dir,
+        compression=args.compression,
+        min_side=args.min_side,
+        max_pixels=args.max_pixels,
+        image_size=args.image_size,
+        num_workers=args.num_workers,
+        download_only=args.download_only,
+        n_first=args.n_first,
+        suppress_prints=args.supress_prints,
+        cli_context=True
+    )
 
 
 if __name__ == "__main__":
