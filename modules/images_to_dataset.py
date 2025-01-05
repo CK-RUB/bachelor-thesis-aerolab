@@ -89,7 +89,7 @@ def download_images(input_file, file_type, column_name, download_dir, num_worker
     return downloaded_files
 
 
-def gather_input_images(input_dirs, n_first):
+def gather_local_images(input_dirs, n_first):
     """
     Gathers all supported image files from the provided input directories or files.
 
@@ -121,7 +121,7 @@ def gather_input_images(input_dirs, n_first):
 
     return valid_files[:n_first] if n_first else valid_files
 
-def convert_and_filter_image(input_file, output_file, compression, min_side, max_pixels, image_size):
+def process_image(input_file, output_file, compression, min_side, max_pixels, image_size):
     """
     Processes a single image: crops, converts, and filters by size criteria.
 
@@ -160,8 +160,8 @@ def convert_and_filter_image(input_file, output_file, compression, min_side, max
     return None
 
 
-def convert_and_filter_images(input_files, output_dir, output_type, compression, min_side, max_pixels,
-                              image_size, num_workers):
+def process_images(input_files, output_dir, output_type, compression, min_side, max_pixels,
+                   image_size, num_workers):
     """
     Processes images in parallel: crops, converts, and filters by size criteria.
 
@@ -198,7 +198,7 @@ def convert_and_filter_images(input_files, output_dir, output_type, compression,
             specific_output_dir.mkdir(parents=True, exist_ok=True)
             futures.append(
                 executor.submit(
-                    convert_and_filter_image,
+                    process_image,
                     file,
                     specific_output_dir / file.with_suffix(f".{output_type}").name,
                     compression,
@@ -271,11 +271,11 @@ def main():
             raise argparse.ArgumentTypeError("For input_type 'file', --input_dirs is required.")
 
         print("Gathering input images...")
-        input_files = gather_input_images(args.input_dirs, args.n_first)
+        input_files = gather_local_images(args.input_dirs, args.n_first)
 
     print("Processing images...")
-    convert_and_filter_images(input_files, args.output_dir, args.output_type, args.compression, args.min_side,
-                              args.max_pixels, args.image_size, args.num_workers)
+    process_images(input_files, args.output_dir, args.output_type, args.compression, args.min_side,
+                   args.max_pixels, args.image_size, args.num_workers)
 
 
 if __name__ == "__main__":
