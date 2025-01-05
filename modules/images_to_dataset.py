@@ -1,5 +1,7 @@
 import argparse
 from pathlib import Path
+from urllib.parse import urlparse
+
 import requests
 from PIL import Image
 import pandas as pd
@@ -24,8 +26,15 @@ def download_image(url, download_dir):
         response = requests.get(url, stream=True)
         response.raise_for_status()
 
+        # Extract hostname from URL
+        hostname = urlparse(url).hostname or "unknown"
+
+        # Create a subdirectory for the hostname
+        hostname_dir = download_dir / hostname
+        hostname_dir.mkdir(parents=True, exist_ok=True)
+
         # Extract filename without query parameters
-        filename = download_dir / Path(url.split('?')[0]).name
+        filename = hostname_dir / Path(url.split('?')[0]).name
 
         # Filter by extension before saving
         if filename.suffix.lower() not in Image.registered_extensions():
@@ -37,7 +46,8 @@ def download_image(url, download_dir):
         counter = 1
 
         while filename.exists():
-            filename = download_dir / f"{filename.stem}_{counter}{filename.suffix}"
+            filename = hostname_dir / f"{filename.stem}_{counter}{filename.suffix}"
+            counter += 1
 
         with open(filename, "wb") as f:
             for chunk in response.iter_content(1024):
@@ -121,6 +131,7 @@ def gather_local_images(input_dirs, n_first):
 
     return valid_files[:n_first] if n_first else valid_files
 
+
 def process_image(input_file, output_file, compression, min_side, max_pixels, image_size):
     """
     Processes a single image: crops, converts, and filters by size criteria.
@@ -162,7 +173,7 @@ def process_image(input_file, output_file, compression, min_side, max_pixels, im
 
 
 def process_images(input_files, output_dir, output_type, compression, min_side, max_pixels,
-                   image_size, num_workers):
+                   image_size, num_workers, input_dirs):
     """
     Processes images in parallel: crops, converts, and filters by size criteria.
 
@@ -175,47 +186,65 @@ def process_images(input_files, output_dir, output_type, compression, min_side, 
         max_pixels (int): Maximum total number of pixels.
         image_size (int): Size of the square center crop.
         num_workers (int): Number of worker threads for processing.
+        input_dirs (list): List of input directories for calculating relative paths.
 
     Returns:
-        list: A list of file paths for successfully processed images.
+        list: A list of Path objects for the directories containing the successfully processed images.
     """
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    processed_files = []
+    dataset_dir = output_dir / "dataset"
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    dataset_dirs = []
 
-    # Determine the common base directory
-    common_base = os.path.commonpath([str(file.parent) for file in input_files])
+
+    def compute_relative_path(filepath):
+        """
+        Computes the relative path of a file with respect to the provided input directories.
+
+        Args:
+            filepath (Path): The file path to compute the relative path for.
+
+        Returns:
+            Path: The relative path if the file is within any input directory, otherwise the file name.
+        """
+
+        for input_dir in input_dirs:
+            input_dir_path = Path(input_dir)
+
+            if filepath.is_relative_to(input_dir_path):
+                return input_dir_path.name / filepath.relative_to(input_dir_path)
+
+        return filepath.name
+
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        futures = []
+        futures_to_dirs = {}
 
         for file in input_files:
-            relative_subdir = Path(file.parent).relative_to(common_base)
-            specific_output_dir = output_dir / relative_subdir
-
-            if specific_output_dir.exists():
-                specific_output_dir = specific_output_dir.with_name(f"{specific_output_dir.name}-dataset")
-
+            relative_path = compute_relative_path(file)
+            specific_output_dir = dataset_dir / relative_path.parent
             specific_output_dir.mkdir(parents=True, exist_ok=True)
-            futures.append(
-                executor.submit(
-                    process_image,
-                    file,
-                    specific_output_dir / file.with_suffix(f".{output_type}").name,
-                    compression,
-                    min_side,
-                    max_pixels,
-                    image_size
-                )
+
+            futures = executor.submit(
+                process_image,
+                file,
+                specific_output_dir / file.with_suffix(f".{output_type}").name,
+                compression,
+                min_side,
+                max_pixels,
+                image_size
             )
 
-        for future in tqdm(as_completed(futures), total=len(input_files), desc="Processing images"):
+            futures_to_dirs[futures] = specific_output_dir
+
+        for future in tqdm(as_completed(futures_to_dirs), total=len(futures_to_dirs), desc="Processing images"):
             result = future.result()
+            specific_output_dir = futures_to_dirs[future]
 
-            if result:
-                processed_files.append(result)
+            if result and specific_output_dir not in dataset_dirs:
+                dataset_dirs.append(specific_output_dir)
 
-    return processed_files
+    return dataset_dirs
 
 
 def main():
@@ -272,6 +301,7 @@ def main():
         download_dir = args.download_dir if args.download_dir else args.output_dir / "download"
         print(f"Downloading images from {args.input_type.upper()}...")
         input_files = download_images(args.input_file, args.input_type, args.csv_column, download_dir, args.num_workers, args.n_first)
+        input_dirs = [download_dir]
 
         if args.download_only:
             print("Download only mode enabled. Skipping processing.")
@@ -282,11 +312,16 @@ def main():
             raise argparse.ArgumentTypeError("For input_type 'file', --input_dirs is required.")
 
         print("Gathering input images...")
+        input_dirs = args.input_dirs
         input_files = gather_local_images(args.input_dirs, args.n_first)
 
     print("Processing images...")
-    process_images(input_files, args.output_dir, args.output_type, args.compression, args.min_side,
-                   args.max_pixels, args.image_size, args.num_workers)
+    dataset_dirs = process_images(input_files, args.output_dir, args.output_type, args.compression, args.min_side,
+                   args.max_pixels, args.image_size, args.num_workers, input_dirs)
+
+    print("Processed Dataset Directories:")
+    for directory in dataset_dirs:
+        print(directory)
 
 
 if __name__ == "__main__":
