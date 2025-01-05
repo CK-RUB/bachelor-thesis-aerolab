@@ -145,6 +145,7 @@ def process_image(input_file, output_file, compression, min_side, max_pixels, im
 
             if ((min_side is None or smaller_side >= min_side) and
                     (max_pixels is None or total_pixels <= max_pixels)):
+
                 crop_size = min(image_size, smaller_side)
                 left = (img.width - crop_size) // 2
                 top = (img.height - crop_size) // 2
@@ -232,10 +233,10 @@ def main():
                         help="Directory to save the processed images. Required.")
     parser.add_argument("--download_dir", type=Path, required=False, default=None,
                         help="Directory to save downloaded images. Defaults to 'output_dir/download'. Optional.")
-    parser.add_argument("--output_type", type=str, required=True, choices=["png", "jpg"],
-                        help="Output image format. Choices: 'png', 'jpg'. Required.")
-    parser.add_argument("--compression", type=int, required=True,
-                        help="Compression level. Range: 0-100 for JPG or 0-9 for PNG. Required.")
+    parser.add_argument("--output_type", type=str, default="png", required=False, choices=["png", "jpg"],
+                        help="Output image format. Choices: 'png', 'jpg'. Default: 'png'. Optional.")
+    parser.add_argument("--compression", type=int, default=None, required=False,
+                        help="Compression level. Range: 0-95 for JPG or 0-9 for PNG. Default: 75 or 6. Optional.")
     parser.add_argument("--min_side", type=int, default=None, required=False,
                         help="Minimum size of the smaller side. Default: None. Optional.")
     parser.add_argument("--max_pixels", type=int, default=None, required=False,
@@ -250,6 +251,16 @@ def main():
                         help="If specified, restricts downloading and processing to the first n images. Optional.")
 
     args = parser.parse_args()
+
+    if args.compression is None:
+        args.compression = 75 if args.output_type == "jpg" else 6
+    else:
+        if args.output_type == "jpg":
+            if not 0 <= args.compression <= 95:
+                raise argparse.ArgumentTypeError("Compression level must be between 0 and 95 for JPG.")
+        if args.output_type == "png":
+            if not 0 <= args.compression <= 9:
+                raise argparse.ArgumentTypeError("Compression level must be between 0 and 9 for PNG.")
 
     if args.input_type in ["csv", "txt"]:
         if not args.input_file:
