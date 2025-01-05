@@ -5,6 +5,7 @@ from PIL import Image
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
+import os
 
 
 def download_image(url, download_dir):
@@ -49,7 +50,7 @@ def download_image(url, download_dir):
         return None
 
 
-def download_images(input_file, file_type, column_name, download_dir, num_workers):
+def download_images(input_file, file_type, column_name, download_dir, num_workers, n_first):
     """
     Downloads images from URLs provided in a TXT or CSV file using multithreading.
 
@@ -59,6 +60,7 @@ def download_images(input_file, file_type, column_name, download_dir, num_worker
         column_name (str): Name of the column in the CSV file that contains URLs (only used if file_type is 'csv').
         download_dir (Path): Directory where the downloaded images will be saved.
         num_workers (int): Number of worker threads for downloading.
+        n_first (int): If specified, only download the first n images.
 
     Returns:
         list: A list of file paths for the successfully downloaded images.
@@ -67,9 +69,9 @@ def download_images(input_file, file_type, column_name, download_dir, num_worker
     download_dir.mkdir(parents=True, exist_ok=True)
 
     if file_type == "txt":
-        urls = input_file.read_text().splitlines()
+        urls = input_file.read_text().splitlines()[:n_first] if n_first else input_file.read_text().splitlines()
     elif file_type == "csv":
-        urls = pd.read_csv(input_file)[column_name]
+        urls = pd.read_csv(input_file)[column_name][:n_first] if n_first else pd.read_csv(input_file)[column_name]
     else:
         raise ValueError("Unsupported file type. Only 'txt' and 'csv' are allowed.")
 
@@ -87,12 +89,13 @@ def download_images(input_file, file_type, column_name, download_dir, num_worker
     return downloaded_files
 
 
-def gather_input_images(input_dirs):
+def gather_input_images(input_dirs, n_first):
     """
     Gathers all supported image files from the provided input directories or files.
 
     Args:
         input_dirs (list): List of directories or files to gather images from.
+        n_first (int): If specified, only gather the first n images.
 
     Returns:
         list: A list of file paths to the gathered images.
@@ -116,7 +119,7 @@ def gather_input_images(input_dirs):
         else:
             print(f"Unsupported file type for file {f}: {f.suffix}")
 
-    return valid_files
+    return valid_files[:n_first] if n_first else valid_files
 
 def convert_and_filter_image(input_file, output_file, compression, min_side, max_pixels, image_size):
     """
@@ -179,18 +182,31 @@ def convert_and_filter_images(input_files, output_dir, output_type, compression,
     output_dir.mkdir(parents=True, exist_ok=True)
     processed_files = []
 
+    # Determine the common base directory
+    common_base = os.path.commonpath([str(file.parent) for file in input_files])
+
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        futures = [
-            executor.submit(
-                convert_and_filter_image,
-                file,
-                output_dir / file.with_suffix(f".{output_type}").name,
-                compression,
-                min_side,
-                max_pixels,
-                image_size
-            ) for file in input_files
-        ]
+        futures = []
+
+        for file in input_files:
+            relative_subdir = Path(file.parent).relative_to(common_base)
+            specific_output_dir = output_dir / relative_subdir
+
+            if specific_output_dir.exists():
+                specific_output_dir = specific_output_dir.with_name(f"{specific_output_dir.name}-dataset")
+
+            specific_output_dir.mkdir(parents=True, exist_ok=True)
+            futures.append(
+                executor.submit(
+                    convert_and_filter_image,
+                    file,
+                    specific_output_dir / file.with_suffix(f".{output_type}").name,
+                    compression,
+                    min_side,
+                    max_pixels,
+                    image_size
+                )
+            )
 
         for future in tqdm(as_completed(futures), total=len(input_files), desc="Processing images"):
             result = future.result()
@@ -230,6 +246,8 @@ def main():
                         help="Number of worker threads for parallel execution. Default: 64. Optional.")
     parser.add_argument("--download_only", action="store_true", required=False, default=False,
                         help="If set, only downloads images and skips processing. Applicable for 'csv' or 'txt'. Optional.")
+    parser.add_argument("--n_first", type=int, required=False, default=None,
+                        help="If specified, restricts downloading and processing to the first n images. Optional.")
 
     args = parser.parse_args()
 
@@ -242,7 +260,7 @@ def main():
 
         download_dir = args.download_dir if args.download_dir else args.output_dir / "download"
         print(f"Downloading images from {args.input_type.upper()}...")
-        input_files = download_images(args.input_file, args.input_type, args.csv_column, download_dir, args.num_workers)
+        input_files = download_images(args.input_file, args.input_type, args.csv_column, download_dir, args.num_workers, args.n_first)
 
         if args.download_only:
             print("Download only mode enabled. Skipping processing.")
@@ -253,7 +271,7 @@ def main():
             raise argparse.ArgumentTypeError("For input_type 'file', --input_dirs is required.")
 
         print("Gathering input images...")
-        input_files = gather_input_images(args.input_dirs)
+        input_files = gather_input_images(args.input_dirs, args.n_first)
 
     print("Processing images...")
     convert_and_filter_images(input_files, args.output_dir, args.output_type, args.compression, args.min_side,
