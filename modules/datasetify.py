@@ -200,7 +200,7 @@ def process_images(input_files, input_dirs, output_type, output_dir, compression
         input_files (list): List of file paths to the input images.
         input_dirs (list): List of input directories for calculating relative paths.
         output_type (str): Output image format ('png' or 'jpg').
-        output_dir (Path): Directory where the processed images will be saved.
+        output_dir (Path): Directory where the processed images will be saved, creates 'datasets' subdirectory.
         compression (int): Compression level (0-95 for JPG, 0-9 for PNG).
         min_side (int): Minimum allowed size of the smaller side.
         max_pixels (int): Maximum total number of pixels.
@@ -212,7 +212,7 @@ def process_images(input_files, input_dirs, output_type, output_dir, compression
         list: A list of Path objects for the directories containing the successfully processed images.
     """
 
-    dataset_dir = output_dir / "dataset"
+    dataset_dir = output_dir / "datasets"
     dataset_dir.mkdir(parents=True, exist_ok=True)
     dataset_dirs = []
 
@@ -281,7 +281,7 @@ def create_dataset(input_types, input_csvs, csv_columns, input_txts, input_dirs,
         input_txts (list): List of paths to TXT files containing image URLs (required for "txt").
         input_dirs (list): List of directories or files containing images to process (required for "file").
         output_type (str): Format for processed images ("png" or "jpg").
-        output_dir (Path): Directory to save processed images.
+        output_dir (Path): Directory to save processed images, "datasets" subdirectory is created.
         download_dir (Path): Directory to save downloaded images. Defaults to a subdirectory in output_dir.
         compression (int): Compression level (0-95 for JPG, 0-9 for PNG). Default depends on output_type.
         min_side (int): Minimum allowed size of the smaller side of images.
@@ -407,7 +407,7 @@ def main():
     parser.add_argument("--output_type", type=str, default="png", required=False, choices=["png", "jpg"],
                         help="Output image format. Choices: 'png', 'jpg'. Default: 'png'. Optional.")
     parser.add_argument("--output_dir", type=Path, required=True,
-                        help="Directory to save the processed images. Required.")
+                        help="Directory to save the processed images, 'datasets' subdirectory is created. Required.")
     parser.add_argument("--download_dir", type=Path, default=None, required=False,
                         help="Directory to save downloaded images. Defaults to 'output_dir/download'. Optional.")
 
