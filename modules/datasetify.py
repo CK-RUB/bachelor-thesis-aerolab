@@ -8,6 +8,24 @@ from tqdm import tqdm
 from urllib.parse import urlparse
 
 
+def raise_value_error(error_message, cli_context=True):
+    """
+    Raises a ValueError or argparse.ArgumentTypeError depending on the context.
+
+    Args:
+        error_message (str): The error message to raise with the exception.
+        cli_context (bool): If True, raises an argparse.ArgumentTypeError; otherwise, raises a ValueError.
+
+    Raises:
+        argparse.ArgumentTypeError or ValueError: Depending on the value of cli_context.
+    """
+
+    if cli_context:
+        raise argparse.ArgumentTypeError(error_message)
+    else:
+        raise ValueError(error_message)
+
+
 def download_image(url, download_dir, suppress_prints=False):
     """
     Downloads a single image from a URL and saves it in the specified directory.
@@ -250,16 +268,35 @@ def process_images(input_files, input_dirs, output_type, output_dir, compression
     return dataset_dirs
 
 
-def raise_value_error(error_message, cli_context=True):
-    if cli_context:
-        raise argparse.ArgumentTypeError(error_message)
-    else:
-        raise ValueError(error_message)
-
-
 def create_dataset(input_types, input_csvs, csv_columns, input_txts, input_dirs, output_type, output_dir, download_dir,
                    compression, min_side, max_pixels, image_size=512, num_workers=64, download_only=False, n_first=None,
                    suppress_prints=False, cli_context=False):
+    """
+    Creates a processed dataset from various input sources by downloading, gathering, and processing images.
+
+    Args:
+        input_types (list): Types of input sources (e.g., "csv", "txt", "file").
+        input_csvs (list): List of paths to CSV files containing image URLs (required for "csv").
+        csv_columns (list): List of column names in the CSV files containing URLs (required for "csv").
+        input_txts (list): List of paths to TXT files containing image URLs (required for "txt").
+        input_dirs (list): List of directories or files containing images to process (required for "file").
+        output_type (str): Format for processed images ("png" or "jpg").
+        output_dir (Path): Directory to save processed images.
+        download_dir (Path): Directory to save downloaded images. Defaults to a subdirectory in output_dir.
+        compression (int): Compression level (0-95 for JPG, 0-9 for PNG). Default depends on output_type.
+        min_side (int): Minimum allowed size of the smaller side of images.
+        max_pixels (int): Maximum allowed total number of pixels in images.
+        image_size (int): Size of the square center crop. Default is 512.
+        num_workers (int): Number of worker threads for parallel processing. Default is 64.
+        download_only (bool): If True, only downloads images and skips further processing.
+        n_first (int): If specified, restricts downloading and processing to the first n images.
+        suppress_prints (bool): If True, suppresses all print statements.
+        cli_context (bool): If True, raises argparse errors for invalid arguments.
+
+    Returns:
+        list: A list of directories containing the successfully processed images.
+    """
+
     images_for_processing = []
     input_dirs_for_processing = []
 
