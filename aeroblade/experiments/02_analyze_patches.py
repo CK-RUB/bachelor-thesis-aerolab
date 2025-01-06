@@ -142,6 +142,7 @@ def parse_args():
             "CompVis/stable-diffusion-v1-1",
             "stabilityai/stable-diffusion-2-base",
             "kandinsky-community/kandinsky-2-1",
+            "stabilityai/stable-diffusion-xl-base-1.0",
         ],
     )
 
