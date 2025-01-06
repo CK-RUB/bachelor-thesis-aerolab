@@ -99,12 +99,12 @@ def download_images(file_type, input_file, column_name, download_dir, num_worker
     return downloaded_files
 
 
-def gather_local_images(input_dirs, n_first, suppress_prints=False):
+def gather_local_images(input_dir, n_first, suppress_prints=False):
     """
     Gathers all supported image files from the provided input directories or files.
 
     Args:
-        input_dirs (list): List of directories or files to gather images from.
+        input_dir (Path): Path to gather images from.
         n_first (int): If specified, only gather the first n images.
         suppress_prints (bool): If True, suppresses all prints.
 
@@ -114,13 +114,10 @@ def gather_local_images(input_dirs, n_first, suppress_prints=False):
 
     input_files = []
 
-    for path in input_dirs:
-        p = Path(path)
-
-        if p.is_dir():
-            input_files.extend(list(p.rglob("*")))
-        elif p.is_file():
-            input_files.append(p)
+    if input_dir.is_dir():
+        input_files.extend(list(input_dir.rglob("*")))
+    elif input_dir.is_file():
+        input_files.append(input_dir)
 
     valid_files = []
 
@@ -219,7 +216,7 @@ def process_images(input_files, input_dirs, output_type, output_dir, compression
             if filepath.is_relative_to(input_dir_path):
                 return input_dir_path.name / filepath.relative_to(input_dir_path)
 
-        return filepath.name
+        return Path(filepath.name)
 
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
@@ -283,7 +280,7 @@ def create_dataset(input_types, input_csvs, csv_columns, input_txts, input_dirs,
             raise_value_error(f"For input_type 'txt', --input_txts is required.", cli_context=cli_context)
 
         if not suppress_prints:
-            print(f"Downloading images from {input_types.upper()}...")
+            print(f"Downloading images from TXT...")
 
         for input_txt in input_txts:
             images_for_processing.extend(download_images("txt", input_txt, "", download_dir, num_workers, n_first, suppress_prints))
@@ -299,13 +296,13 @@ def create_dataset(input_types, input_csvs, csv_columns, input_txts, input_dirs,
             raise_value_error(f"Number of --input_csvs and --csv_columns must be the same.", cli_context=cli_context)
 
         if not suppress_prints:
-            print(f"Downloading images from {input_types.upper()}...")
+            print(f"Downloading images from CSV...")
 
         for input_csv, column_name in zip(input_csvs, csv_columns):
             images_for_processing.extend(download_images("csv", input_csv, column_name, download_dir, num_workers, n_first, suppress_prints))
 
-    if input_types in ["txt", "csv"]:
-        input_dirs_for_processing.extend([download_dir])
+    if "txt" in input_types or "csv" in input_types:
+        input_dirs_for_processing.append(download_dir)
 
         if not suppress_prints:
             print("Downloaded images saved to:", download_dir)
@@ -323,8 +320,10 @@ def create_dataset(input_types, input_csvs, csv_columns, input_txts, input_dirs,
         if not suppress_prints:
             print("Gathering input images...")
 
-        images_for_processing.extend(gather_local_images(input_dirs, n_first, suppress_prints))
         input_dirs_for_processing.extend(input_dirs)
+
+        for input_dir in input_dirs:
+            images_for_processing.extend(gather_local_images(input_dir, n_first, suppress_prints))
 
     if not suppress_prints:
         print("Processing images...")
@@ -391,7 +390,7 @@ def main():
     parser.add_argument("--download_only", action="store_true", required=False, default=False,
                         help="If set, only downloads images and skips processing. Applicable for 'csv' or 'txt'. Optional.")
     parser.add_argument("--n_first", type=int, default=None, required=False,
-                        help="If specified, restricts downloading and processing to the first n images. Optional.")
+                        help="If specified, restricts downloading and processing to the first n images per file or directory. Optional.")
     parser.add_argument("--supress_prints", action="store_true", required=False, default=False,
                         help="If set, suppresses all prints. Optional.")
 
