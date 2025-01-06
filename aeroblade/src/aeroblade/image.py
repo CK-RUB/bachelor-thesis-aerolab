@@ -12,7 +12,6 @@ from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img impo
 )
 from joblib.hashing import hash
 from PIL import Image
-from torch.nn import DataParallel
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms.v2.functional import to_pil_image
 from tqdm import tqdm
@@ -88,10 +87,6 @@ def compute_reconstructions(
             ae = pipe.movq
         else:
             raise ValueError(f"AE not found in {repo_id}.")
-
-        # Enable DataParallel for multi-GPU usage
-        if torch.cuda.device_count() > 1:
-            ae = DataParallel(ae)
 
         # Move AE to the correct device with appropriate dtype
         ae.to(device(), dtype=torch.float16 if torch.cuda.is_available() else torch.float32)
