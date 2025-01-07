@@ -102,6 +102,7 @@ class JPEG(Complexity):
         return {f"jpeg_{self.quality}": result}
 
 
+@mem.cache
 def calculate_pixel_variance(image, neighborhood_size):
     # Convert image to grayscale
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY).astype(np.float64)
