@@ -177,15 +177,15 @@ class Variance(Complexity):
 
 # Wrap the meaningful complexity interpret method with caching
 @mem.cache
-def cached_meaningful_interpret(comp_meas_params, patch_np):
-    comp_meas = MeaningfulComplexity(**comp_meas_params)
+def cached_meaningful_interpret(meaningful_params, patch_np):
+    comp_meas = MeaningfulComplexity(**meaningful_params)
 
     return comp_meas.interpret(patch_np)
 
 
 @mem.cache(ignore=["num_workers"])
 def _compute_meaningful(
-    ds: ImageFolder, comp_meas_params: dict, patch_size: int, patch_stride: int, num_workers: int
+    ds: ImageFolder, meaningful_params: dict, patch_size: int, patch_stride: int, num_workers: int
 ) -> torch.Tensor:
     dl = DataLoader(ds, batch_size=1, num_workers=num_workers)
 
@@ -208,7 +208,7 @@ def _compute_meaningful(
             if patch_np.min() == patch_np.max():
                 complexity = 0
             else:
-                complexity = cached_meaningful_interpret(comp_meas_params, patch_np)
+                complexity = cached_meaningful_interpret(meaningful_params, patch_np)
 
             patch_results.append(sum(complexity))
 
@@ -220,15 +220,15 @@ def _compute_meaningful(
 class Meaningful(Complexity):
     def __init__(
         self,
-        comp_meas_params: dict,
+        meaningful_params: dict,
         patch_size: Optional[int] = None,
         patch_stride: Optional[int] = None,
         num_workers: int = 0,
     ) -> None:
         """
-        comp_meas_params: Parameters for the ComplexityMeasurer.
+        meaningful_params: Parameters for the ComplexityMeasurer.
         """
-        self.comp_meas_params = comp_meas_params
+        self.meaningful_params = meaningful_params
         self.patch_size = patch_size
         self.patch_stride = patch_stride
         self.num_workers = num_workers
@@ -236,7 +236,7 @@ class Meaningful(Complexity):
     def _compute(self, ds: ImageFolder) -> Any:
         return _compute_meaningful(
             ds=ds,
-            comp_meas_params=self.comp_meas_params,
+            meaningful_params=self.meaningful_params,
             patch_size=self.patch_size,
             patch_stride=self.patch_stride,
             num_workers=self.num_workers,
@@ -269,10 +269,10 @@ def complexity_from_config(
             num_workers=num_workers,
         )
     elif config == "meaningful":
-        comp_meas_params = {
+        meaningful_params = {
             "ncs_to_check": 12,
             "n_cluster_inits": 10,
-            "nz": 5,
+            "nz": 4,
             "num_levels": 6,
             "cluster_model": "GMM",
             "info_subsample": 0.8,
@@ -280,7 +280,7 @@ def complexity_from_config(
         }
 
         return Meaningful(
-            comp_meas_params=comp_meas_params,
+            meaningful_params=meaningful_params,
             patch_size=patch_size,
             patch_stride=patch_stride,
             num_workers=num_workers,
