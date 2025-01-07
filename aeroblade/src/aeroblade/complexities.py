@@ -54,7 +54,7 @@ def _compute_jpeg(
 
     image_results = []
 
-    for tensor, _ in tqdm(dl, desc="Computing JPEG complexity", total=len(dl)):
+    for tensor, _ in tqdm(dl, desc=f"Computing JPEG_{quality} complexity", total=len(dl)):
         if patch_size is None:
             patches = [tensor[0]]
         else:
@@ -124,7 +124,7 @@ def _compute_variance(
 
     image_results = []
 
-    for tensor, _ in tqdm(dl, desc="Computing VARIANCE complexity", total=len(dl)):
+    for tensor, _ in tqdm(dl, desc=f"Computing VARIANCE_{neighborhood_size} complexity", total=len(dl)):
         if patch_size is None:
             patches = [tensor[0]]
         else:
@@ -171,7 +171,7 @@ class Variance(Complexity):
         )
 
     def _postprocess(self, result: Any) -> dict[str, torch.Tensor]:
-        return {"variance": result}
+        return {f"variance_{self.neighborhood_size}": result}
 
 
 # Wrap the meaningful complexity interpret method with caching
