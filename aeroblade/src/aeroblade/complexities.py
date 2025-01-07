@@ -118,7 +118,7 @@ def calculate_pixel_variance(image, neighborhood_size):
 
 @mem.cache(ignore=["num_workers"])
 def _compute_variance(
-    ds: ImageFolder, patch_size: int, patch_stride: int, neighborhood_size: int, num_workers: int
+    ds: ImageFolder, neighborhood_size: int, patch_size: int, patch_stride: int, num_workers: int
 ) -> torch.Tensor:
     dl = DataLoader(ds, batch_size=1, num_workers=num_workers)
 
@@ -148,25 +148,25 @@ def _compute_variance(
 class Variance(Complexity):
     def __init__(
         self,
+        neighborhood_size: int = 8,
         patch_size: Optional[int] = None,
         patch_stride: Optional[int] = None,
-        neighborhood_size: int = 8,
         num_workers: int = 0,
     ) -> None:
         """
         Variance complexity metric with neighborhood variance.
         """
+        self.neighborhood_size = neighborhood_size
         self.patch_size = patch_size
         self.patch_stride = patch_stride
-        self.neighborhood_size = neighborhood_size
         self.num_workers = num_workers
 
     def _compute(self, ds: ImageFolder) -> Any:
         return _compute_variance(
             ds=ds,
+            neighborhood_size=self.neighborhood_size,
             patch_size=self.patch_size,
             patch_stride=self.patch_stride,
-            neighborhood_size=self.neighborhood_size,
             num_workers=self.num_workers,
         )
 
@@ -209,7 +209,7 @@ def _compute_meaningful(
             else:
                 complexity = cached_meaningful_interpret(comp_meas_params, patch_np)
 
-            patch_results.append(np.sum(complexity))
+            patch_results.append(sum(complexity))
 
         image_results.append(torch.tensor(patch_results, dtype=torch.float64))
 
@@ -258,20 +258,23 @@ def complexity_from_config(
             patch_stride=patch_stride,
             num_workers=num_workers,
         )
-    elif config == "variance":
+    elif config.startswith("variance"):
+        _, neighborhood_size = config.split("_")
+
         return Variance(
+            neighborhood_size=int(neighborhood_size),
             patch_size=patch_size,
             patch_stride=patch_stride,
             num_workers=num_workers,
         )
     elif config == "meaningful":
         comp_meas_params = {
-            "ncs_to_check": 8,
-            "n_cluster_inits": 1,
-            "nz": 2,
-            "num_levels": 4,
+            "ncs_to_check": 12,
+            "n_cluster_inits": 10,
+            "nz": 5,
+            "num_levels": 6,
             "cluster_model": "GMM",
-            "info_subsample": 0.3,
+            "info_subsample": 0.8,
             "suppress_all_prints": True
         }
 
