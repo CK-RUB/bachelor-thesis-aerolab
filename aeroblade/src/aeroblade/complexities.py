@@ -68,7 +68,7 @@ def _compute_jpeg(
             nbytes = len(encode_jpeg(convert_image_dtype(patch, torch.uint8), quality=quality))
             patch_results.append(nbytes)
 
-        image_results.append(torch.tensor(patch_results, dtype=torch.float16))
+        image_results.append(torch.tensor(patch_results, dtype=torch.float64))
 
     return torch.stack(image_results) / (patch.shape[1] * patch.shape[2])  # normalize
 
@@ -140,7 +140,7 @@ def _compute_variance(
             patch_variance = np.mean(variance_map)  # Aggregate variance for the patch
             patch_results.append(patch_variance)
 
-        image_results.append(torch.tensor(patch_results, dtype=torch.float32))
+        image_results.append(torch.tensor(patch_results, dtype=torch.float64))
 
     return torch.stack(image_results) / (patch.shape[1] * patch.shape[2])  # normalize
 
@@ -211,7 +211,7 @@ def _compute_meaningful(
 
             patch_results.append(np.sum(complexity))
 
-        image_results.append(torch.tensor(patch_results, dtype=torch.float16))
+        image_results.append(torch.tensor(patch_results, dtype=torch.float64))
 
     return torch.stack(image_results) / (patch.shape[1] * patch.shape[2])  # normalize
 
