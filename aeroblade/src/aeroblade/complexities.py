@@ -104,7 +104,7 @@ class JPEG(Complexity):
 
 def calculate_pixel_variance(image, neighborhood_size):
     # Convert image to grayscale
-    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY).astype(float)
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY).astype(np.float64)
     kernel = np.ones((neighborhood_size, neighborhood_size))
     kernel /= kernel.size
     mean = convolve(gray_image, kernel)
@@ -124,7 +124,7 @@ def _compute_variance(
 
     image_results = []
 
-    for tensor, _ in tqdm(dl, desc="Computing Variance complexity", total=len(dl)):
+    for tensor, _ in tqdm(dl, desc="Computing VARIANCE complexity", total=len(dl)):
         if patch_size is None:
             patches = [tensor[0]]
         else:
@@ -190,7 +190,7 @@ def _compute_meaningful(
 
     image_results = []
 
-    for tensor, _ in tqdm(dl, desc="Computing Meaningful complexity", total=len(dl)):
+    for tensor, _ in tqdm(dl, desc="Computing MEANINGFUL complexity", total=len(dl)):
         if patch_size is None:
             patches = [tensor[0]]
         else:
