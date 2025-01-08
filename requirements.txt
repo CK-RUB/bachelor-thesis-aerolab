@@ -1,3 +1,8 @@
 # Install aeroblade with/without cuda support.
 # -e ./aeroblade
 -e ./aeroblade[cuda]
+
+requests
+pandas
+pillow
+tqdm
