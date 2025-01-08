@@ -201,7 +201,7 @@ def _compute_meaningful(
         patch_results = []
 
         for patch in patches:
-            patch_np = patch.squeeze().numpy()
+            patch_np = patch.permute(1, 2, 0).numpy()  # Convert to HWC format
 
             # Check if the patch is uniform
             if patch_np.min() == patch_np.max():
@@ -269,12 +269,12 @@ def complexity_from_config(
         )
     elif config == "meaningful":
         meaningful_params = {
-            "ncs_to_check": 12,
-            "n_cluster_inits": 10,
-            "nz": 4,
-            "num_levels": 6,
+            "ncs_to_check": 8,
+            "n_cluster_inits": 1,
+            "nz": 2,
+            "num_levels": 4,
             "cluster_model": "GMM",
-            "info_subsample": 0.8,
+            "info_subsample": 0.3,
             "suppress_all_prints": True
         }
 
