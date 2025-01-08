@@ -117,7 +117,7 @@ def calculate_pixel_variance(image, neighborhood_size):
     return variance_map
 
 
-@mem.cache(ignore=["num_workers"])
+# @mem.cache(ignore=["num_workers"])
 def _compute_variance(
     ds: ImageFolder, neighborhood_size: int, patch_size: int, patch_stride: int, num_workers: int
 ) -> torch.Tensor:
@@ -175,7 +175,6 @@ class Variance(Complexity):
         return {f"variance_{self.neighborhood_size}": result}
 
 
-# Wrap the meaningful complexity interpret method with caching
 @mem.cache
 def cached_meaningful_interpret(meaningful_params, patch_np):
     comp_meas = MeaningfulComplexity(**meaningful_params)
@@ -183,7 +182,7 @@ def cached_meaningful_interpret(meaningful_params, patch_np):
     return comp_meas.interpret(patch_np)
 
 
-@mem.cache(ignore=["num_workers"])
+# @mem.cache(ignore=["num_workers"])
 def _compute_meaningful(
     ds: ImageFolder, meaningful_params: dict, patch_size: int, patch_stride: int, num_workers: int
 ) -> torch.Tensor:
