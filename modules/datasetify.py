@@ -1,7 +1,7 @@
 import argparse
 import pandas as pd
 import requests
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from PIL import Image
 from tqdm import tqdm
@@ -105,7 +105,7 @@ def download_images(file_type, input_file, column_name, download_dir, num_worker
 
     downloaded_files = []
 
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
         futures = [executor.submit(download_image, url, download_dir, suppress_prints) for url in urls]
 
         for future in tqdm(as_completed(futures), total=len(urls), desc="Downloading images", disable=suppress_prints):
@@ -237,7 +237,7 @@ def process_images(input_files, input_dirs, output_type, output_dir, compression
         return Path(filepath.name)
 
 
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
         futures_to_dirs = {}
 
         for file in input_files:
