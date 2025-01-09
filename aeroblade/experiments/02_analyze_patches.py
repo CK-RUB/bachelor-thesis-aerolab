@@ -143,6 +143,7 @@ def parse_args():
             "stabilityai/stable-diffusion-2-base",
             "kandinsky-community/kandinsky-2-1",
             "stabilityai/stable-diffusion-xl-base-1.0",
+            "stabilityai/stable-diffusion-xl-refiner-1.0",
         ],
     )
 
