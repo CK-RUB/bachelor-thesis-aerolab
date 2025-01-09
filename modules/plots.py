@@ -80,6 +80,7 @@ def configure_default_plot_style() -> None:
         "ytick.major.pad": 1.0,
         "lines.linewidth": 0.75,
         "lines.markersize": 2,
+        "grid.alpha": 0.5,
     }
     plt.rcParams.update(params)
 
