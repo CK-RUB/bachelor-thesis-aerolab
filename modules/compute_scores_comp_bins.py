@@ -8,11 +8,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from aeroblade.misc import safe_mkdir, write_config
-from sklearn.metrics import average_precision_score
+from sklearn.metrics import average_precision_score, roc_auc_score
 from plots import normalize_column_of_nparrays
 from tqdm import tqdm
 
-def compute_ap_comp_bins(parquet_path, output_dir, real_dir, fake_dirs, complexity_bins):
+def compute_scores_comp_bins(parquet_path, output_dir, real_dir, fake_dirs, complexity_bins):
     # Load data
     data_frame = pd.read_parquet(parquet_path)
 
@@ -68,8 +68,9 @@ def compute_ap_comp_bins(parquet_path, output_dir, real_dir, fake_dirs, complexi
                     y_score = np.concatenate([real_distances, fake_distances])
                     y_true = np.array([1] * len(real_distances) + [0] * len(fake_distances))
 
-                    # Compute AP score
+                    # Compute Scores
                     ap = average_precision_score(y_true=y_true, y_score=y_score)
+                    auroc = roc_auc_score(y_true=y_true, y_score=y_score)
 
                     # Save results
                     detection_results.append({
@@ -81,6 +82,7 @@ def compute_ap_comp_bins(parquet_path, output_dir, real_dir, fake_dirs, complexi
                         "complexity_bin": i,
                         "complexity_bin_center": bin_centers[i],
                         "ap": ap,
+                        "auroc": auroc,
                         "num_real": len(real_distances),
                         "num_fake": len(fake_distances),
                     })
@@ -102,15 +104,15 @@ def compute_ap_comp_bins(parquet_path, output_dir, real_dir, fake_dirs, complexi
     detection_results_df[categoricals] = detection_results_df[categoricals].astype("category")
 
     # Save to Parquet
-    detection_results_df.to_parquet(output_dir / "combined_ap_comp_bins.parquet", index=False)
+    detection_results_df.to_parquet(output_dir / "combined_scores_comp_bins.parquet", index=False)
 
 
 def main(args):
-    output_dir = Path("output/compute_ap_comp_bins") / args.experiment_id
+    output_dir = Path("output/compute_scores_comp_bins") / args.experiment_id
     safe_mkdir(output_dir)
     write_config(vars(args), output_dir)
 
-    compute_ap_comp_bins(
+    compute_scores_comp_bins(
         args.combined_dist_comp_parquet,
         output_dir,
         args.real_dir,
