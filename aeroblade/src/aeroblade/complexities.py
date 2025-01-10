@@ -204,7 +204,7 @@ def _compute_meaningful(
 
             # Check if the patch is uniform
             if patch_np.min() == patch_np.max():
-                complexity = 0
+                complexity = [0]
             else:
                 complexity = cached_meaningful_interpret(meaningful_params, patch_np)
 
