@@ -99,7 +99,7 @@ def main(args):
         "complexity_metric",
     ]
     combined[categoricals] = combined[categoricals].astype("category")
-    combined.to_parquet(output_dir / "combined_dist_compl.parquet")
+    combined.to_parquet(output_dir / "combined_dist_comp.parquet")
 
     print("Done!")
 
