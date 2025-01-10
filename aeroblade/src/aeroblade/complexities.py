@@ -114,7 +114,7 @@ def calculate_pixel_variance(image, neighborhood_size):
     # var formula: variance = E[X^2] - (E[X])^2
     variance_map = mean_sq - mean ** 2
 
-    return variance_map
+    return np.mean(variance_map)
 
 
 # @mem.cache(ignore=["num_workers"])
@@ -137,8 +137,7 @@ def _compute_variance(
 
         for patch in patches:
             patch_np = patch.permute(1, 2, 0).numpy()  # Convert to HWC format for OpenCV
-            variance_map = calculate_pixel_variance(patch_np, neighborhood_size)
-            patch_variance = np.mean(variance_map)  # Aggregate variance for the patch
+            patch_variance = calculate_pixel_variance(patch_np, neighborhood_size)
             patch_results.append(patch_variance)
 
         image_results.append(torch.tensor(patch_results, dtype=torch.float64))
