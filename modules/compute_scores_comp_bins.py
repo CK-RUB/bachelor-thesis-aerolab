@@ -65,8 +65,8 @@ def compute_scores_comp_bins(parquet_path, output_dir, real_dir, fake_dirs, comp
 
                 if len(real_distances) > 0 and len(fake_distances) > 0:  # Ensure non-empty bins
                     # Combine scores and labels
-                    y_score = np.concatenate([real_distances, fake_distances])
-                    y_true = np.array([1] * len(real_distances) + [0] * len(fake_distances))
+                    y_score = -np.concatenate([real_distances, fake_distances]) # back to negative distances
+                    y_true = np.array([0] * len(real_distances) + [1] * len(fake_distances))
 
                     # Compute Scores
                     ap = average_precision_score(y_true=y_true, y_score=y_score)
